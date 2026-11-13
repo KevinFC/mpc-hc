@@ -25,6 +25,7 @@
 #include "DSMPropertyBag.h"
 #include <memory>
 #include "CMPCThemeToolTipCtrl.h"
+#include "LosslessCutStrip.h"
 
 class CMainFrame;
 enum class SeekMode;
@@ -73,6 +74,16 @@ private:
     std::unique_ptr<CDC> m_pEnabledThumb;
     std::unique_ptr<CDC> m_pDisabledThumb;
     CRect m_lastThumbRect;
+
+    // LosslessCut mode: segments drawn in the channel, and the control strip below it
+    CLosslessCutStrip m_llcStrip;
+    bool m_bLlcMode = false;
+    CFont m_llcLabelFont;
+    int m_llcLabelFontHeight = 0;
+    int LlcStripHeight() const;
+    bool DrawsLosslessCutChannel() const;
+    void DrawLosslessCutChannel(CDC& dc, const CRect& channelRect);
+    void PositionLlcStrip();
 
     CString m_timeText;                 // currently displayed time string (empty when none)
     mutable CFont m_timeFont;           // font for the time text
@@ -132,9 +143,13 @@ public:
 
     void UpdateTime();
 
+    void SetLosslessCutMode(bool bOn);  // shows the LosslessCut strip and grows the bar for it
+    void OnLosslessCutChanged();        // segments or LosslessCut state changed: repaint
+
 private:
     DECLARE_MESSAGE_MAP()
 
+    afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnPaint();
     afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
     afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);

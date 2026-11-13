@@ -216,6 +216,11 @@ CAppSettings::CAppSettings()
     , nHoverPosition(TIME_TOOLTIP_ABOVE_SEEKBAR)
     , nTimeOnSeekBar(TIME_ON_SEEKBAR_NEVER)
     , bTimeOnSeekBarLeft(false)
+    , bLosslessCutAutoEnable(true)
+    , iLosslessCutScope(0)
+    , bLosslessCutRestrict(false)
+    , bLosslessCutLoop(false)
+    , bLosslessCutShowList(true)
     , nOSDSize(0)
     , bHideWindowedMousePointer(true)
     , iBrightness(0)
@@ -634,6 +639,25 @@ static constexpr wmcmd_base default_wmcmds[] = {
     { ID_PLAY_REPEAT_AB,                    0, 0,                 IDS_PLAYLOOPMODE_AB },
     { ID_PLAY_REPEAT_AB_MARK_A,      VK_OEM_4, 0,                 IDS_PLAYLOOPMODE_AB_MARK_A },
     { ID_PLAY_REPEAT_AB_MARK_B,      VK_OEM_6, 0,                 IDS_PLAYLOOPMODE_AB_MARK_B },
+    { ID_LLC_TOGGLE_MODE,                   0, 0,                 IDS_LLC_TOGGLE_MODE },
+    { ID_LLC_SET_START,                   'I', FSHIFT,            IDS_LLC_SET_START },
+    { ID_LLC_SET_END,                     'O', FSHIFT,            IDS_LLC_SET_END },
+    { ID_LLC_ADD_SEGMENT,         VK_OEM_PLUS, 0,                 IDS_LLC_ADD_SEGMENT },
+    { ID_LLC_SPLIT_SEGMENT,                 0, 0,                 IDS_LLC_SPLIT_SEGMENT },
+    { ID_LLC_REMOVE_SEGMENT,          VK_BACK, 0,                 IDS_LLC_REMOVE_SEGMENT },
+    { ID_LLC_PREV_SEGMENT,              VK_UP, FSHIFT,            IDS_LLC_PREV_SEGMENT },
+    { ID_LLC_NEXT_SEGMENT,            VK_DOWN, FSHIFT,            IDS_LLC_NEXT_SEGMENT },
+    { ID_LLC_UNDO,                        'Z', FCONTROL,          IDS_LLC_UNDO },
+    { ID_LLC_REDO,                        'Y', FCONTROL,          IDS_LLC_REDO },
+    { ID_LLC_SCOPE_CYCLE,                   0, 0,                 IDS_LLC_SCOPE_CYCLE },
+    { ID_LLC_SCOPE_FULL,                    0, 0,                 IDS_LLC_SCOPE_FULL },
+    { ID_LLC_SCOPE_SEGMENTS,                0, 0,                 IDS_LLC_SCOPE_SEGMENTS },
+    { ID_LLC_SCOPE_SINGLE,                  0, 0,                 IDS_LLC_SCOPE_SINGLE },
+    { ID_LLC_TOGGLE_RESTRICT,               0, 0,                 IDS_LLC_TOGGLE_RESTRICT },
+    { ID_LLC_TOGGLE_LOOP,                   0, 0,                 IDS_LLC_TOGGLE_LOOP },
+    { ID_LLC_TOGGLE_SELECTED,               0, 0,                 IDS_LLC_TOGGLE_SELECTED },
+    { ID_LLC_LAUNCH,                        0, 0,                 IDS_LLC_LAUNCH },
+    { ID_LLC_TOGGLE_SEGMENT_LIST,           0, 0,                 IDS_LLC_TOGGLE_SEGMENT_LIST },
     { ID_NAVIGATE_SKIPFORWARD,        VK_NEXT, 0,                 IDS_AG_NEXT,        APPCOMMAND_MEDIA_NEXTTRACK, wmcmd::X2DOWN },
     { ID_NAVIGATE_SKIPBACK,          VK_PRIOR, 0,                 IDS_AG_PREVIOUS,    APPCOMMAND_MEDIA_PREVIOUSTRACK, wmcmd::X1DOWN },
     { ID_NAVIGATE_SKIPFORWARDFILE,    VK_NEXT, FCONTROL,          IDS_AG_NEXT_FILE },
@@ -1182,6 +1206,12 @@ void CAppSettings::SaveSettings(bool write_full_history /* = false */)
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_TIME_TOOLTIP_POSITION, nHoverPosition);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_TIME_ON_SEEKBAR, nTimeOnSeekBar);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_TIME_ON_SEEKBAR_LEFT, bTimeOnSeekBarLeft);
+    pApp->WriteProfileString(IDS_R_SETTINGS, IDS_RS_LLC_PATH, strLosslessCutPath);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_AUTO_ENABLE, bLosslessCutAutoEnable);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_SCOPE, iLosslessCutScope);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_RESTRICT, bLosslessCutRestrict);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_LOOP, bLosslessCutLoop);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_SHOW_LIST, bLosslessCutShowList);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CONTROLSTATE, nCustomPresetControlState);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CAPTION, nCustomPresetCaption);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_STARTUP_PRESET, nStartupPreset);
@@ -1831,6 +1861,12 @@ void CAppSettings::LoadSettings()
         nTimeOnSeekBar = TIME_ON_SEEKBAR_NEVER;
     }
     bTimeOnSeekBarLeft = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_TIME_ON_SEEKBAR_LEFT, FALSE);
+    strLosslessCutPath = pApp->GetProfileString(IDS_R_SETTINGS, IDS_RS_LLC_PATH, _T(""));
+    bLosslessCutAutoEnable = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_AUTO_ENABLE, TRUE);
+    iLosslessCutScope = std::clamp((int)pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_SCOPE, 0), 0, 2);
+    bLosslessCutRestrict = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_RESTRICT, FALSE);
+    bLosslessCutLoop = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_LOOP, FALSE);
+    bLosslessCutShowList = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_SHOW_LIST, TRUE);
     nCustomPresetControlState = pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CONTROLSTATE, CS_SEEKBAR | CS_TOOLBAR);
     nCustomPresetControlState &= (CS_SEEKBAR | CS_TOOLBAR | CS_INFOBAR | CS_STATSBAR | CS_STATUSBAR); // drop invalid bits
     nCustomPresetCaption = pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CAPTION, MODE_HIDEMENU);

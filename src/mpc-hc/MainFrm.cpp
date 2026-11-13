@@ -725,6 +725,7 @@ CMainFrame::CMainFrame()
     , m_geometry(*this)
     , m_api(*this)
     , m_subs(*this)
+    , m_llc(*this)
     , m_iPlaybackMode(PM_NONE)
     , m_lCurrentChapter(0)
     , m_lChapterStartTime(0xFFFFFFFF)
@@ -766,6 +767,7 @@ CMainFrame::CMainFrame()
     , m_wndPreView(this)
     , m_wndCaptureBar(this)
     , m_wndNavigationBar(this)
+    , m_wndLlcSegmentsBar(this)
     , m_pVideoWnd(nullptr)
     , m_pOSDWnd(nullptr)
     , m_pDedicatedFSVideoWnd(nullptr)
@@ -973,6 +975,13 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
         m_wndNavigationBar.SetBarStyle(m_wndNavigationBar.GetBarStyle() | CBRS_TOOLTIPS | CBRS_FLYBY | CBRS_SIZE_DYNAMIC);
         m_wndNavigationBar.EnableDocking(CBRS_ALIGN_LEFT | CBRS_ALIGN_RIGHT);
         m_controls.m_panels[CMainFrameControls::Panel::NAVIGATION] = &m_wndNavigationBar;
+    }
+    bResult = bResult && m_wndLlcSegmentsBar.Create(this, AFX_IDW_DOCKBAR_RIGHT);
+    if (bResult) {
+        m_wndLlcSegmentsBar.SetBarStyle(m_wndLlcSegmentsBar.GetBarStyle() | CBRS_TOOLTIPS | CBRS_FLYBY | CBRS_SIZE_DYNAMIC);
+        m_wndLlcSegmentsBar.EnableDocking(CBRS_ALIGN_ANY);
+        m_wndLlcSegmentsBar.SetWidth(m_dpi.ScaleX(300));
+        m_controls.m_panels[CMainFrameControls::Panel::LOSSLESSCUT] = &m_wndLlcSegmentsBar;
     }
     if (!bResult) {
         TRACE(_T("Failed to create all dockable bars\n"));
@@ -1505,6 +1514,11 @@ BOOL CMainFrame::PreCreateWindow(CREATESTRUCT& cs)
 
 BOOL CMainFrame::PreTranslateMessage(MSG* pMsg)
 {
+    // LosslessCut mode: plain I / O set the segment in / out points (ahead of the key bindings)
+    if (m_llc.HandleKeyDown(pMsg)) {
+        return TRUE;
+    }
+
     if (pMsg->message == WM_KEYDOWN) {
         if (pMsg->wParam == VK_ESCAPE) {
             bool fEscapeNotAssigned = !AssignedToCmd(VK_ESCAPE);
@@ -1684,6 +1698,9 @@ BOOL CMainFrame::OnCmdMsg(UINT nID, int nCode, void* pExtra, AFX_CMDHANDLERINFO*
         return TRUE;
     }
     if (m_subs.OnCmdMsg(nID, nCode, pExtra, pHandlerInfo)) {
+        return TRUE;
+    }
+    if (m_llc.OnCmdMsg(nID, nCode, pExtra, pHandlerInfo)) {
         return TRUE;
     }
 
@@ -2362,6 +2379,10 @@ void CMainFrame::OnTimer(UINT_PTR nIDEvent)
                             }
                             m_graph.m_pMS->GetDuration(&rtDur);
 
+                            if (m_llc.EnforcePlayback(rtNow)) {
+                                return; // jumped over a gap, or stopped after the last segment
+                            }
+
                             if ((abRepeat.positionA && rtNow < abRepeat.positionA || abRepeat.positionB && rtNow >= abRepeat.positionB) && GetMediaState() != State_Stopped) {
                                 PerformABRepeat();
                                 return;
@@ -2451,6 +2472,7 @@ void CMainFrame::OnTimer(UINT_PTR nIDEvent)
                 m_wndSeekBar.SetRange(0, rtDur);
                 m_wndSeekBar.SetPos(rtNow);
                 m_wndSeekBar.UpdateTime();
+                m_llc.OnPositionUpdate(rtNow);
                 m_OSD.SetRange(rtDur);
                 m_OSD.SetPos(rtNow);
                 m_api.m_Lcd.SetMediaRange(0, rtDur);
@@ -2811,6 +2833,9 @@ void CMainFrame::OnTimer(UINT_PTR nIDEvent)
         break;
         case TIMER_HIDER:
             m_timerHider.NotifySubscribers();
+            break;
+        case TIMER_LLC_WATCH:
+            m_llc.OnWatchTimer();
             break;
         case TIMER_DELAYEDSEEK: {
             const auto pendingSeek = queuedSeek;
@@ -4438,6 +4463,9 @@ LRESULT CMainFrame::OnFilePostOpenmedia(WPARAM wParam, LPARAM lParam)
         LoadKeyFrames();
     }
 
+    // LosslessCut mode, before the auto-zoom below so the window is sized for its controls
+    m_llc.OnMediaOpened();
+
     // remember OpenMediaData for later use
     m_lastOMD.Free();
     m_lastOMD.Attach((OpenMediaData*)lParam);
@@ -4740,6 +4768,8 @@ LRESULT CMainFrame::OnOpenMediaFailed(WPARAM wParam, LPARAM lParam)
 
 void CMainFrame::OnFilePostClosemedia(bool bNextIsQueued/* = false*/)
 {
+    m_llc.OnMediaClosing(bNextIsQueued);
+
     SetPlaybackMode(PM_NONE);
     SetLoadState(MLS::CLOSED);
 
@@ -7328,6 +7358,9 @@ void CMainFrame::OnPlayPlay()
     }
 
     if (IsStateLoaded()) {
+        // Playing only LosslessCut segments: start from the next segment, or over from the first
+        m_llc.OnBeforePlay();
+
         // If playback was previously stopped or ended, we need to reset the window size
         bool bVideoWndNeedReset = GetMediaState() == State_Stopped || m_fEndOfStream;
         bool still_image = !m_bFirstPlay && !m_fAudioOnly && !m_wndSeekBar.HasDuration() && m_wndStatusBar.GetTimerCurPos() == 0LL && GetPlaybackMode() == PM_FILE && IsImageFile(lastOpenFile);
@@ -7800,6 +7833,8 @@ void CMainFrame::OnPlaySeek(UINT nID)
     if (rtSeekTo < 0) {
         rtSeekTo = 0;
     }
+    // When seeking is kept inside LosslessCut segments, jump across the gaps between them
+    m_llc.OffsetWithinRanges(rtPos, rtJumpDiff, rtSeekTo);
 
     if (s.bFastSeek && !m_kfs.empty()) {
         REFERENCE_TIME rtMaxForwardDiff;
@@ -7839,7 +7874,7 @@ void CMainFrame::AdjustStreamPosPoller(bool restart)
 {
     int current_value = m_iStreamPosPollerInterval;
 
-    if (g_bExternalSubtitleTime || IsSubresyncBarVisible()) {
+    if (g_bExternalSubtitleTime || IsSubresyncBarVisible() || m_llc.WantsFastPolling()) {
         m_iStreamPosPollerInterval = 40;
     } else {
         m_iStreamPosPollerInterval = AfxGetAppSettings().nStreamPosPollerInterval;
@@ -14812,6 +14847,9 @@ void CMainFrame::DoSeekTo(REFERENCE_TIME rtPos, bool bShowOSD /*= true*/)
     if (rtPos < 0) {
         rtPos = 0;
     }
+
+    // LosslessCut mode can keep every kind of seek inside the segments
+    rtPos = m_llc.ConstrainSeek(rtPos);
 
     if (abRepeat.positionA && rtPos < abRepeat.positionA || abRepeat.positionB && rtPos > abRepeat.positionB) {
         DisableABRepeat();

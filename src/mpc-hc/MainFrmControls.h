@@ -72,6 +72,7 @@ public:
         CAPTURE,
         NAVIGATION,
         EDL,
+        LOSSLESSCUT,
     };
     std::map<Panel, CPlayerBar*> m_panels;
 

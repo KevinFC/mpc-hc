@@ -291,7 +291,7 @@ struct AutoChangeFullscreenMode {
     unsigned                    uDelay = 0u;
 };
 
-#define ACCEL_LIST_SIZE 207
+#define ACCEL_LIST_SIZE 226
 
 struct wmcmd_base : public ACCEL {
     BYTE mouse;
@@ -898,6 +898,12 @@ public:
     int             nHoverPosition;
     int             nTimeOnSeekBar;
     bool            bTimeOnSeekBarLeft;
+    CString         strLosslessCutPath;
+    bool            bLosslessCutAutoEnable;
+    int             iLosslessCutScope;      // CLosslessCutController::Scope
+    bool            bLosslessCutRestrict;
+    bool            bLosslessCutLoop;
+    bool            bLosslessCutShowList;
     CString         strOSDFont;
     int             nOSDSize;
     bool            bHideWindowedMousePointer;

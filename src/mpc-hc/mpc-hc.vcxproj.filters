@@ -411,6 +411,14 @@
     <ClCompile Include="CaptureController.cpp" />
     <ClCompile Include="DiscController.cpp" />
     <ClCompile Include="FavoritesRecent.cpp" />
+    <ClCompile Include="LosslessCut.cpp" />
+    <ClCompile Include="LosslessCutProject.cpp" />
+    <ClCompile Include="LosslessCutStrip.cpp">
+      <Filter>Toolbars</Filter>
+    </ClCompile>
+    <ClCompile Include="LosslessCutSegmentsBar.cpp">
+      <Filter>Toolbars</Filter>
+    </ClCompile>
     <ClCompile Include="VideoGeometry.cpp" />
     <ClCompile Include="ApiBridge.cpp" />
     <ClCompile Include="SubtitleController.cpp" />
@@ -1006,6 +1014,14 @@
     <ClInclude Include="CaptureController.h" />
     <ClInclude Include="DiscController.h" />
     <ClInclude Include="FavoritesRecent.h" />
+    <ClInclude Include="LosslessCut.h" />
+    <ClInclude Include="LosslessCutProject.h" />
+    <ClInclude Include="LosslessCutStrip.h">
+      <Filter>Toolbars</Filter>
+    </ClInclude>
+    <ClInclude Include="LosslessCutSegmentsBar.h">
+      <Filter>Toolbars</Filter>
+    </ClInclude>
     <ClInclude Include="VideoGeometry.h" />
     <ClInclude Include="ApiBridge.h" />
     <ClInclude Include="SubtitleController.h" />

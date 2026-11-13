@@ -1176,6 +1176,25 @@
 #define IDS_SEEKBAR_HOVER_TOOLTIP       33461
 #define IDS_AG_TOGGLE_OVERRIDE_SUBTITLE_STYLES 33462
 #define ID_COLOR_CONTROLS               33464
+#define ID_LLC_TOGGLE_MODE              33465
+#define ID_LLC_SET_START                33466
+#define ID_LLC_SET_END                  33467
+#define ID_LLC_ADD_SEGMENT              33468
+#define ID_LLC_SPLIT_SEGMENT            33469
+#define ID_LLC_REMOVE_SEGMENT           33470
+#define ID_LLC_PREV_SEGMENT             33471
+#define ID_LLC_NEXT_SEGMENT             33472
+#define ID_LLC_UNDO                     33473
+#define ID_LLC_REDO                     33474
+#define ID_LLC_SCOPE_CYCLE              33475
+#define ID_LLC_SCOPE_FULL               33476
+#define ID_LLC_SCOPE_SEGMENTS           33477
+#define ID_LLC_SCOPE_SINGLE             33478
+#define ID_LLC_TOGGLE_RESTRICT          33479
+#define ID_LLC_TOGGLE_LOOP              33480
+#define ID_LLC_TOGGLE_SELECTED          33481
+#define ID_LLC_LAUNCH                   33482
+#define ID_LLC_TOGGLE_SEGMENT_LIST      33483
 #define ID_RECENT_FILE_START            34000
 #define ID_RECENT_FILE_END              34999
 #define IDS_MFMT_AVI                    39001
@@ -1908,13 +1927,36 @@
 #define IDS_MODERN_THEME_STYLE_WINDOWS10 58060
 #define IDS_MODERN_THEME_STYLE_WINDOWS11 58061
 #define IDS_PPAGEADVANCED_SUB_GLYPH_CACHE_MB 58062
+#define IDS_LLC_TOGGLE_MODE             58063
+#define IDS_LLC_SET_START               58064
+#define IDS_LLC_SET_END                 58065
+#define IDS_LLC_ADD_SEGMENT             58066
+#define IDS_LLC_SPLIT_SEGMENT           58067
+#define IDS_LLC_REMOVE_SEGMENT          58068
+#define IDS_LLC_PREV_SEGMENT            58069
+#define IDS_LLC_NEXT_SEGMENT            58070
+#define IDS_LLC_UNDO                    58071
+#define IDS_LLC_REDO                    58072
+#define IDS_LLC_SCOPE_CYCLE             58073
+#define IDS_LLC_SCOPE_FULL              58074
+#define IDS_LLC_SCOPE_SEGMENTS          58075
+#define IDS_LLC_SCOPE_SINGLE            58076
+#define IDS_LLC_TOGGLE_RESTRICT         58077
+#define IDS_LLC_TOGGLE_LOOP             58078
+#define IDS_LLC_TOGGLE_SELECTED         58079
+#define IDS_LLC_LAUNCH                  58080
+#define IDS_PPAGEADVANCED_GRP_LOSSLESSCUT 58081
+#define IDS_PPAGEADVANCED_LLC_PATH      58082
+#define IDS_PPAGEADVANCED_LLC_AUTO      58083
+#define IDS_LLC_TOGGLE_SEGMENT_LIST     58084
+#define IDS_LLC_SEGMENTS_CAPTION        58085
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        20079
-#define _APS_NEXT_COMMAND_VALUE         33465
+#define _APS_NEXT_COMMAND_VALUE         33484
 #define _APS_NEXT_CONTROL_VALUE         22105
 #define _APS_NEXT_SYMED_VALUE           24052
 #endif

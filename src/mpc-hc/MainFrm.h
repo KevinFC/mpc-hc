@@ -47,6 +47,8 @@
 #include "VideoGeometry.h"
 #include "ApiBridge.h"
 #include "SubtitleController.h"
+#include "LosslessCut.h"
+#include "LosslessCutSegmentsBar.h"
 #include "TimerWrappers.h"
 #include "OSD.h"
 #include "CMPCThemeMenu.h"
@@ -203,6 +205,7 @@ private:
         TIMER_HIDER,
         TIMER_WINDOW_FULLSCREEN,
         TIMER_DELAYEDSEEK,
+        TIMER_LLC_WATCH,
         TIMER_ONETIME_START,
         TIMER_ONETIME_END = TIMER_ONETIME_START + 127,
     };
@@ -420,6 +423,11 @@ private:
     friend class CSubtitleController; // for the load state, the bars, m_OSD, the dynamic menus, the stream selection helpers, the status message and the modal parent
     friend class CSubtitleDlDlg; // for the status message, the options sheet and m_fAudioOnly
     friend struct SubtitlesInfo; // for the graph and the playlist bar
+
+public:
+    CLosslessCutController m_llc;
+private:
+    friend class CLosslessCutController; // for the graph, the bars, m_OSD, the keyframes, the seek helpers, the stream position poller and the opened file
 
     //
 
@@ -767,6 +775,7 @@ protected:  // control bar embedded members
     CPlayerCaptureBar m_wndCaptureBar;
     CPlayerNavigationBar m_wndNavigationBar;
     CEditListEditor m_wndEditListEditor;
+    CLosslessCutSegmentsBar m_wndLlcSegmentsBar;
 
     std::unique_ptr<CDebugShadersDlg> m_pDebugShaders;
     std::unique_ptr<CColorControlsDlg> m_pColorControls;

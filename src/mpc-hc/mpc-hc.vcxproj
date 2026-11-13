@@ -316,6 +316,10 @@ if not exist "$(OutDir)LAVFilters" if exist "$(SolutionDir)bin\mpc-hc_x86\LAVFil
     <ClCompile Include="CaptureController.cpp" />
     <ClCompile Include="DiscController.cpp" />
     <ClCompile Include="FavoritesRecent.cpp" />
+    <ClCompile Include="LosslessCut.cpp" />
+    <ClCompile Include="LosslessCutProject.cpp" />
+    <ClCompile Include="LosslessCutStrip.cpp" />
+    <ClCompile Include="LosslessCutSegmentsBar.cpp" />
     <ClCompile Include="VideoGeometry.cpp" />
     <ClCompile Include="ApiBridge.cpp" />
     <ClCompile Include="SubtitleController.cpp" />
@@ -537,6 +541,10 @@ if not exist "$(OutDir)LAVFilters" if exist "$(SolutionDir)bin\mpc-hc_x86\LAVFil
     <ClInclude Include="CaptureController.h" />
     <ClInclude Include="DiscController.h" />
     <ClInclude Include="FavoritesRecent.h" />
+    <ClInclude Include="LosslessCut.h" />
+    <ClInclude Include="LosslessCutProject.h" />
+    <ClInclude Include="LosslessCutStrip.h" />
+    <ClInclude Include="LosslessCutSegmentsBar.h" />
     <ClInclude Include="VideoGeometry.h" />
     <ClInclude Include="ApiBridge.h" />
     <ClInclude Include="SubtitleController.h" />

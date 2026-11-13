@@ -1613,6 +1613,7 @@ BEGIN
         MENUITEM "Pla&ylist",                   ID_VIEW_PLAYLIST
         MENUITEM "Captu&re",                    ID_VIEW_CAPTURE
         MENUITEM "Na&vigation",                 ID_VIEW_NAVIGATION
+        MENUITEM "&LosslessCut Mode",           ID_LLC_TOGGLE_MODE
         POPUP "&Presets..."
         BEGIN
             MENUITEM "&Minimal",                    ID_VIEW_PRESETS_MINIMAL
@@ -2034,6 +2035,7 @@ BEGIN
             MENUITEM "Pla&ylist",                   ID_VIEW_PLAYLIST
             MENUITEM "Captu&re",                    ID_VIEW_CAPTURE
             MENUITEM "Na&vigation",                 ID_VIEW_NAVIGATION
+            MENUITEM "&LosslessCut Mode",           ID_LLC_TOGGLE_MODE
             POPUP "&Presets..."
             BEGIN
                 MENUITEM "&Minimal",                    ID_VIEW_PRESETS_MINIMAL
@@ -2156,6 +2158,7 @@ BEGIN
             MENUITEM "Pla&ylist",                   ID_VIEW_PLAYLIST
             MENUITEM "Captu&re",                    ID_VIEW_CAPTURE
             MENUITEM "Na&vigation",                 ID_VIEW_NAVIGATION
+            MENUITEM "&LosslessCut Mode",           ID_LLC_TOGGLE_MODE
             POPUP "&Presets..."
             BEGIN
                 MENUITEM "&Minimal",                    ID_VIEW_PRESETS_MINIMAL
@@ -4363,6 +4366,33 @@ BEGIN
     IDS_MODERN_THEME_STYLE_WINDOWS11 "Windows 11"
     IDS_PPAGEADVANCED_SUB_GLYPH_CACHE_MB "Subtitle glyph cache limit in MB. The internal subtitle renderer's cache grows up to this limit on scripts that need it."
     IDS_AUDIO_BOOST_WARNING "WARNING: Boosting audio volume can in some situations have a negative effect on audio quality due to overflow.\n\nThere are two better and safer methods for increasing volume:\n1) Enabling mixing in the internal audio decoder settings.\nInternal Filters > Audio Decoder > Mixing\nThis is recommended if you have stereo speakers or headphones.\nTo increase loudness of voices, set center mix level to 1.0 in the mixing settings.\n2) Enable Normalize"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_LLC_TOGGLE_MODE     "LosslessCut: Toggle LosslessCut mode"
+    IDS_LLC_SET_START       "LosslessCut: Set segment start"
+    IDS_LLC_SET_END         "LosslessCut: Set segment end"
+    IDS_LLC_ADD_SEGMENT     "LosslessCut: Add segment"
+    IDS_LLC_SPLIT_SEGMENT   "LosslessCut: Split segment at playhead"
+    IDS_LLC_REMOVE_SEGMENT  "LosslessCut: Remove segment"
+    IDS_LLC_PREV_SEGMENT    "LosslessCut: Previous segment"
+    IDS_LLC_NEXT_SEGMENT    "LosslessCut: Next segment"
+    IDS_LLC_UNDO            "LosslessCut: Undo"
+    IDS_LLC_REDO            "LosslessCut: Redo"
+    IDS_LLC_SCOPE_CYCLE     "LosslessCut: Cycle playback scope"
+    IDS_LLC_SCOPE_FULL      "LosslessCut: Play everything"
+    IDS_LLC_SCOPE_SEGMENTS  "LosslessCut: Play segments only"
+    IDS_LLC_SCOPE_SINGLE    "LosslessCut: Play current segment only"
+    IDS_LLC_TOGGLE_RESTRICT "LosslessCut: Keep seeking inside segments"
+    IDS_LLC_TOGGLE_LOOP     "LosslessCut: Loop"
+    IDS_LLC_TOGGLE_SELECTED "LosslessCut: Include segment in export"
+    IDS_LLC_LAUNCH          "LosslessCut: Open in LosslessCut"
+    IDS_PPAGEADVANCED_GRP_LOSSLESSCUT "LosslessCut"
+    IDS_PPAGEADVANCED_LLC_PATH "Full path of LosslessCut.exe, used by the LosslessCut button. When empty, you are asked to locate it the first time."
+    IDS_PPAGEADVANCED_LLC_AUTO "Turn on LosslessCut mode automatically when a LosslessCut project (<name>-proj.llc) exists next to the opened file."
+    IDS_LLC_TOGGLE_SEGMENT_LIST "LosslessCut: Show segment list"
+    IDS_LLC_SEGMENTS_CAPTION "Segments"
 END
 
 #endif    // English (United States) resources

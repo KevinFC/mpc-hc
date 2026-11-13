@@ -51,6 +51,7 @@ CPlayerSeekBar::CPlayerSeekBar(CMainFrame* pMainFrame)
     , m_bHoverThumb(false)
     , m_tooltipState(TOOLTIP_HIDDEN)
     , m_bIgnoreLastTooltipPoint(true)
+    , m_llcStrip(pMainFrame)
 {
     ZeroMemory(&m_ti, sizeof(m_ti));
     m_ti.cbSize = sizeof(m_ti);
@@ -94,6 +95,13 @@ BOOL CPlayerSeekBar::Create(CWnd* pParentWnd)
     m_ti.lpszText = nullptr;
 
     m_tooltip.SendMessage(TTM_ADDTOOL, 0, (LPARAM)&m_ti);
+
+    // The LosslessCut strip is a child; keep the bar's own painting off it.
+    ModifyStyle(0, WS_CLIPCHILDREN);
+    llcui::EnsureGdiplus();
+    if (!m_llcStrip.Create(this)) {
+        ASSERT(FALSE);
+    }
 
     return TRUE;
 }
@@ -141,10 +149,259 @@ CSize CPlayerSeekBar::CalcFixedLayout(BOOL bStretch, BOOL bHorz)
     } else {
         ret.cy = m_pMainFrame->m_dpi.ScaleY(20);
     }
+    if (m_bLlcMode) {
+        // the timeline keeps its normal height; only the control strip is added below it
+        ret.cy += LlcStripHeight();
+    }
     if (!m_pMainFrame->m_controls.ControlChecked(CMainFrameControls::Toolbar::CONTROLS)) {
         ret.cy += ADD_TO_BOTTOM_WITHOUT_CONTROLBAR;
     }
     return ret;
+}
+
+int CPlayerSeekBar::LlcStripHeight() const
+{
+    return m_bLlcMode ? m_llcStrip.GetHeight() : 0;
+}
+
+void CPlayerSeekBar::PositionLlcStrip()
+{
+    if (!m_llcStrip.m_hWnd) {
+        return;
+    }
+    CRect r;
+    GetClientRect(&r);
+    if (m_bLlcMode && r.Height() > LlcStripHeight()) {
+        r.top = r.bottom - LlcStripHeight();
+        m_llcStrip.SetWindowPos(nullptr, r.left, r.top, r.Width(), r.Height(), SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    } else if (m_llcStrip.IsWindowVisible()) {
+        m_llcStrip.ShowWindow(SW_HIDE);
+    }
+}
+
+void CPlayerSeekBar::SetLosslessCutMode(bool bOn)
+{
+    if (bOn == m_bLlcMode) {
+        OnLosslessCutChanged();
+        return;
+    }
+    m_bLlcMode = bOn;
+    HideToolTip();
+    PositionLlcStrip();
+    Invalidate();
+}
+
+void CPlayerSeekBar::OnLosslessCutChanged()
+{
+    if (m_hWnd) {
+        Invalidate();
+        m_llcStrip.Refresh();
+    }
+}
+
+void CPlayerSeekBar::OnSize(UINT nType, int cx, int cy)
+{
+    __super::OnSize(nType, cx, cy);
+    PositionLlcStrip();
+}
+
+bool CPlayerSeekBar::DrawsLosslessCutChannel() const
+{
+    return m_bLlcMode && m_bHasDuration && m_pMainFrame->m_llc.IsActive();
+}
+
+void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
+{
+    using namespace Gdiplus;
+    const int w = channelRect.Width(), h = channelRect.Height();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    const auto& dpi = m_pMainFrame->m_dpi;
+    const auto& llc = m_pMainFrame->m_llc;
+    const auto& segs = llc.GetSegments();
+    const int current = llc.GetCurrentIndex();
+    const llcui::Palette pal = llcui::GetPalette();
+
+    CDC mem;
+    mem.CreateCompatibleDC(&dc);
+    CBitmap bmp;
+    bmp.CreateCompatibleBitmap(&dc, w, h);
+    CBitmap* oldBmp = mem.SelectObject(&bmp);
+    mem.FillSolidRect(0, 0, w, h, pal.channel);
+
+    const double span = static_cast<double>(m_rtStop - m_rtStart);
+    auto X = [&](REFERENCE_TIME t) {
+        const double x = (t - m_rtStart) * w / span;
+        return static_cast<REAL>(std::clamp(x, 0.0, static_cast<double>(w)));
+    };
+
+    // segment number font, sized to the channel
+    const int fontH = std::clamp(h - dpi.ScaleY(6), dpi.ScaleY(8), dpi.ScaleY(13));
+    if (!m_llcLabelFont.GetSafeHandle() || m_llcLabelFontHeight != fontH) {
+        m_llcLabelFont.DeleteObject();
+        LOGFONT lf = {};
+        CMPCThemeUtil::getFontByType(m_llcLabelFont, this, CMPCThemeUtil::MessageFont, false, true);
+        m_llcLabelFont.GetLogFont(&lf);
+        m_llcLabelFont.DeleteObject();
+        lf.lfHeight = -fontH;
+        lf.lfWeight = FW_SEMIBOLD;
+        m_llcLabelFont.CreateFontIndirect(&lf);
+        m_llcLabelFontHeight = fontH;
+    }
+    const bool showLabels = h >= dpi.ScaleY(11);
+
+    {
+        Graphics g(mem.GetSafeHdc());
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+
+        // gaps: LosslessCut's dashed center line (segments are drawn over it)
+        if (!segs.empty()) {
+            Pen dash(llcui::ToGdi(llcui::Blend(pal.text, pal.channel, pal.dark ? 0.22 : 0.3)), 1.0f);
+            dash.SetDashStyle(DashStyleDash);
+            const REAL mid = h / 2.0f;
+            g.DrawLine(&dash, 3.0f, mid, w - 3.0f, mid);
+        }
+
+        // chapters: short ticks at the edges, so they don't fight with the segments
+        {
+            CAutoLock lock(&m_csChapterBag);
+            if (m_pChapterBag) {
+                SolidBrush tick(llcui::ToGdi(llcui::Blend(pal.text, pal.channel, 0.35)));
+                const REAL tl = static_cast<REAL>(dpi.ScaleY(3));
+                for (DWORD i = 0; i < m_pChapterBag->ChapGetCount(); i++) {
+                    REFERENCE_TIME rtChap;
+                    if (SUCCEEDED(m_pChapterBag->ChapGet(i, &rtChap, nullptr))) {
+                        const REAL x = X(rtChap);
+                        g.FillRectangle(&tick, x, 0.0f, 1.0f, tl);
+                        g.FillRectangle(&tick, x, h - tl, 1.0f, tl);
+                    }
+                }
+            }
+        }
+
+        const REAL radius = static_cast<REAL>(dpi.ScaleX(4));
+        const REAL minWidth = static_cast<REAL>(dpi.ScaleX(3));
+        const REAL edgeW = static_cast<REAL>(std::max(2, dpi.ScaleX(2)));
+
+        auto drawSegment = [&](int i) {
+            const auto& seg = segs[i];
+            const REAL x0 = X(CLosslessCutController::ToRT(seg.start));
+            if (seg.IsMarker()) {
+                // a start without an end yet: a flag
+                const COLORREF c = llcui::SegmentDot(i, pal);
+                SolidBrush b(llcui::ToGdi(c));
+                g.FillRectangle(&b, x0 - 1.0f, 0.0f, 2.0f, static_cast<REAL>(h));
+                const REAL f = static_cast<REAL>(std::min(h / 2, dpi.ScaleY(7)));
+                PointF flag[] = { PointF(x0, 0.0f), PointF(x0 + f * 1.2f, f / 2.0f), PointF(x0, f) };
+                g.FillPolygon(&b, flag, 3);
+                return;
+            }
+            REAL x1 = X(CLosslessCutController::ToRT(*seg.end));
+            if (x1 - x0 < minWidth) {
+                x1 = x0 + minWidth;
+            }
+            const llcui::SegState state = (i == current) ? llcui::SegState::Current
+                                          : seg.selected ? llcui::SegState::Normal : llcui::SegState::Excluded;
+            const RectF rr(x0, 0.5f, x1 - x0, h - 1.0f);
+            GraphicsPath path;
+            llcui::AddRoundRect(path, rr, std::min(radius, (x1 - x0) / 2.0f));
+            SolidBrush fill(llcui::ToGdi(llcui::SegmentFill(i, state, pal)));
+            g.FillPath(&fill, &path);
+            if (state == llcui::SegState::Current) {
+                // LosslessCut marks the active segment with bright vertical edges
+                const COLORREF edge = llcui::SegmentEdge(i, pal);
+                Region clip(&path);
+                g.SetClip(&clip);
+                SolidBrush eb(llcui::ToGdi(edge));
+                g.FillRectangle(&eb, rr.X, rr.Y, edgeW, rr.Height);
+                g.FillRectangle(&eb, rr.GetRight() - edgeW, rr.Y, edgeW, rr.Height);
+                g.ResetClip();
+                Pen outline(llcui::ToGdi(edge, 110), 1.0f);
+                g.DrawPath(&outline, &path);
+            }
+        };
+        for (int i = 0; i < static_cast<int>(segs.size()); i++) {
+            if (i != current) {
+                drawSegment(i);
+            }
+        }
+        if (current >= 0 && current < static_cast<int>(segs.size())) {
+            drawSegment(current);
+        }
+
+        // A-B repeat marks stay visible
+        REFERENCE_TIME aPos, bPos;
+        if (m_pMainFrame->CheckABRepeat(aPos, bPos)) {
+            SolidBrush ab(llcui::ToGdi(AppIsThemeLoaded() ? CMPCTheme::SeekbarABColor : RGB(242, 13, 13)));
+            const REAL t = static_cast<REAL>(dpi.ScaleX(2));
+            if (aPos) {
+                g.FillRectangle(&ab, X(aPos) - t / 2, 0.0f, t, static_cast<REAL>(h));
+            }
+            if (bPos) {
+                g.FillRectangle(&ab, X(bPos) - t / 2, 0.0f, t, static_cast<REAL>(h));
+            }
+        }
+    }
+
+    // segment numbers (and names when there is room), like LosslessCut's timeline
+    if (showLabels) {
+        CFont* oldFont = mem.SelectObject(&m_llcLabelFont);
+        mem.SetBkMode(TRANSPARENT);
+        const int padX = dpi.ScaleX(5);
+        for (int i = 0; i < static_cast<int>(segs.size()); i++) {
+            const auto& seg = segs[i];
+            const int x0 = static_cast<int>(X(CLosslessCutController::ToRT(seg.start)));
+            const int x1 = seg.IsMarker() ? x0 + dpi.ScaleX(40) : static_cast<int>(X(CLosslessCutController::ToRT(*seg.end)));
+            CString label;
+            label.Format(_T("%d"), i + 1);
+            if (!seg.name.empty()) {
+                label += _T("  ") + CString(llc::Utf8ToWide(seg.name).c_str());
+            }
+            const int numW = mem.GetTextExtent(label.Left(label.Find(_T(' ')) < 0 ? label.GetLength() : label.Find(_T(' ')))).cx;
+            CRect tr(x0 + padX + (seg.IsMarker() ? dpi.ScaleX(6) : 0), 0, x1 - padX, h);
+            if (tr.Width() < numW) {
+                continue;
+            }
+            const bool excluded = !seg.selected && i != current;
+            const COLORREF fg = pal.dark ? (excluded ? RGB(170, 170, 170) : RGB(255, 255, 255))
+                                         : (excluded ? RGB(90, 90, 90) : RGB(255, 255, 255));
+            // soft shadow keeps white text readable on the light palette colors
+            mem.SetTextColor(llcui::Blend(RGB(0, 0, 0), llcui::SegmentFill(i, i == current ? llcui::SegState::Current : excluded ? llcui::SegState::Excluded : llcui::SegState::Normal, pal), 0.35));
+            CRect sr(tr);
+            sr.OffsetRect(0, 1);
+            mem.DrawText(label, sr, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_END_ELLIPSIS);
+            mem.SetTextColor(fg);
+            mem.DrawText(label, tr, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_END_ELLIPSIS);
+        }
+        mem.SelectObject(oldFont);
+    }
+
+    // playhead: a thin line with carets, outlined so it shows on any segment color
+    {
+        Graphics g(mem.GetSafeHdc());
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+        const REAL x = std::clamp(X(m_rtPosDraw), 1.0f, w - 1.0f);
+        const REAL lw = static_cast<REAL>(std::max(2, dpi.ScaleX(2)));
+        const REAL c = static_cast<REAL>(std::min(dpi.ScaleX(5), h / 3));
+        const Color line = llcui::ToGdi(pal.dark ? RGB(240, 240, 240) : RGB(20, 20, 20));
+        const Color shadow = llcui::ToGdi(pal.dark ? RGB(0, 0, 0) : RGB(255, 255, 255), 150);
+        SolidBrush sb(shadow), lb(line);
+        g.FillRectangle(&sb, x - lw / 2 - 1, 0.0f, lw + 2, static_cast<REAL>(h));
+        g.FillRectangle(&lb, x - lw / 2, 0.0f, lw, static_cast<REAL>(h));
+        PointF top[] = { PointF(x - c, 0.0f), PointF(x + c, 0.0f), PointF(x, c) };
+        PointF bottom[] = { PointF(x - c, static_cast<REAL>(h)), PointF(x + c, static_cast<REAL>(h)), PointF(x, h - c) };
+        Pen sp(shadow, 1.0f);
+        g.DrawPolygon(&sp, top, 3);
+        g.DrawPolygon(&sp, bottom, 3);
+        g.FillPolygon(&lb, top, 3);
+        g.FillPolygon(&lb, bottom, 3);
+    }
+
+    dc.BitBlt(channelRect.left, channelRect.top, w, h, &mem, 0, 0, SRCCOPY);
+    mem.SelectObject(oldBmp);
 }
 
 void CPlayerSeekBar::MoveThumb(const CPoint& point)
@@ -157,6 +414,13 @@ void CPlayerSeekBar::MoveThumb(const CPoint& point)
         if (duration >= 600000000LL && s.bFastSeek && (GetKeyState(VK_SHIFT) >= 0)) {
             REFERENCE_TIME rtMaxDiff = s.bAllowInaccurateFastseek ? 200000000LL : std::min(100000000LL, duration / 30);
             rtPos = m_pMainFrame->GetClosestKeyFrame(rtPos, rtMaxDiff, rtMaxDiff);
+        }
+        // LosslessCut "keep seeking inside segments": the thumb stops at the nearest segment edge
+        const REFERENCE_TIME rtClampedDraw = m_pMainFrame->m_llc.ClampToRanges(rtPosDraw);
+        if (rtClampedDraw != rtPosDraw) {
+            rtPos = rtPosDraw = rtClampedDraw;
+        } else {
+            rtPos = m_pMainFrame->m_llc.ClampToRanges(rtPos);
         }
         SyncThumbToVideo(rtPos, rtPosDraw);
     }
@@ -279,7 +543,9 @@ CRect CPlayerSeekBar::GetBaseRect() const
     CRect r;
     GetClientRect(&r);
     r.top += 1;
-    if (m_pMainFrame->m_controls.ControlChecked(CMainFrameControls::Toolbar::CONTROLS)) {
+    if (m_bLlcMode) {
+        r.bottom -= LlcStripHeight(); // the LosslessCut strip sits below the channel
+    } else if (m_pMainFrame->m_controls.ControlChecked(CMainFrameControls::Toolbar::CONTROLS)) {
         r.bottom += ADD_TO_BOTTOM_WITHOUT_CONTROLBAR;
     }
 
@@ -316,6 +582,7 @@ CRect CPlayerSeekBar::GetSeekableRect() const
     // the time section, so the dedicated time section does not behave like the seekbar (#3256).
     CRect r;
     GetClientRect(&r);
+    r.bottom -= LlcStripHeight();
     if (TimeSectionVisible()) {
         if (TimeSectionOnLeft()) {
             r.left = GetChannelRect().left;
@@ -651,6 +918,20 @@ void CPlayerSeekBar::GenerateToolTipText(REFERENCE_TIME rtPos)
     } else {
         m_tooltipText.Format(_T("%s - %s"), time.GetString(), static_cast<LPCTSTR>(chapterName));
     }
+
+    const auto& llc = m_pMainFrame->m_llc;
+    if (llc.IsActive()) {
+        const int idx = llc.SegmentAt(rtPos);
+        if (idx >= 0) {
+            CString seg;
+            seg.Format(_T("  \x2022  Segment %d"), idx + 1);
+            const auto& name = llc.GetSegments()[idx].name;
+            if (!name.empty()) {
+                seg += _T(": ") + CString(llc::Utf8ToWide(name).c_str());
+            }
+            m_tooltipText += seg;
+        }
+    }
 }
 
 void CPlayerSeekBar::UpdateToolTipText()
@@ -766,6 +1047,7 @@ bool CPlayerSeekBar::DraggingThumb()
 }
 
 BEGIN_MESSAGE_MAP(CPlayerSeekBar, CDialogBar)
+    ON_WM_SIZE()
     ON_WM_PAINT()
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONDBLCLK()
@@ -813,7 +1095,11 @@ void CPlayerSeekBar::OnPaint()
         CRect r(GetThumbRect());
         m_lastThumbRect = r;
 
-        if (m_bHasDuration) {
+        if (DrawsLosslessCutChannel()) {
+            // LosslessCut timeline; the excluded clip makes the regular channel below a no-op
+            DrawLosslessCutChannel(dc, channelRect);
+            dc.ExcludeClipRect(&channelRect);
+        } else if (m_bHasDuration) {
             // A-B Repeat
             REFERENCE_TIME aPos, bPos;
             if (m_pMainFrame->CheckABRepeat(aPos, bPos)) {
@@ -893,7 +1179,10 @@ void CPlayerSeekBar::OnPaint()
             m_lastThumbRect = r;
         }
 
-        if (m_bHasDuration) {
+        if (DrawsLosslessCutChannel()) {
+            DrawLosslessCutChannel(dc, channelRect);
+            dc.ExcludeClipRect(&channelRect);
+        } else if (m_bHasDuration) {
             // A-B Repeat
             REFERENCE_TIME aPos, bPos;
             if (m_pMainFrame->CheckABRepeat(aPos, bPos)) {
@@ -974,6 +1263,17 @@ void CPlayerSeekBar::OnContextMenu(CWnd* pWnd, CPoint point)
         ScreenToClient(&clientPoint);
         if (GetTimeRect().PtInRect(clientPoint)) {
             m_pMainFrame->m_wndStatusBar.ShowTimerOptionsMenu(this, point);
+            return;
+        }
+    }
+    // LosslessCut mode: segment actions at the clicked position
+    if (m_pMainFrame->m_llc.IsActive() && m_bHasDuration && point.x != -1) {
+        CPoint clientPoint = point;
+        ScreenToClient(&clientPoint);
+        if (GetSeekableRect().PtInRect(clientPoint)) {
+            HideToolTip();
+            m_pMainFrame->PreviewWindowHide();
+            m_pMainFrame->m_llc.ShowContextMenu(this, point, PositionFromClientPoint(clientPoint));
             return;
         }
     }
