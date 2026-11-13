@@ -51,7 +51,6 @@ CPlayerSeekBar::CPlayerSeekBar(CMainFrame* pMainFrame)
     , m_bHoverThumb(false)
     , m_tooltipState(TOOLTIP_HIDDEN)
     , m_bIgnoreLastTooltipPoint(true)
-    , m_lastDragSeekTickCount(0)
 {
     ZeroMemory(&m_ti, sizeof(m_ti));
     m_ti.cbSize = sizeof(m_ti);
@@ -163,30 +162,22 @@ void CPlayerSeekBar::MoveThumb(const CPoint& point)
     }
 }
 
-void CPlayerSeekBar::SyncVideoToThumb()
+void CPlayerSeekBar::SeekToThumb(CPoint point, SeekMode mode)
 {
-    GetParent()->PostMessage(WM_HSCROLL, (WPARAM)0, reinterpret_cast<LPARAM>(m_hWnd));
-}
-
-void CPlayerSeekBar::CheckScrollDistance(CPoint point, REFERENCE_TIME minimum_duration_change, ULONGLONG minimum_elapsed_tickcount)
-{
-    ULONGLONG tickcount = GetTickCount64();
-    ULONGLONG ticks_since_last_seek = tickcount - m_lastDragSeekTickCount;
-    REFERENCE_TIME posdiff = m_rtHoverPos > m_rtPosDraw ? m_rtHoverPos - m_rtPosDraw : m_rtPosDraw - m_rtHoverPos;
-
-    if (posdiff >= minimum_duration_change && ticks_since_last_seek >= minimum_elapsed_tickcount) {
-        m_lastDragSeekTickCount = tickcount;
-        m_rtHoverPos = m_rtPosDraw;
-        m_hoverPoint = point;
-
-        if (pauseAfterFirstScroll && minimum_elapsed_tickcount > 0LL) {
-            pauseAfterFirstScroll = false;
-            pausedForScrolling = true;
-            m_pMainFrame->MediaControlPause();
-        }
-
-        SyncVideoToThumb();
+    if (m_pMainFrame->GetLoadState() != MLS::LOADED) {
+        return;
     }
+
+    m_rtHoverPos = m_rtPosDraw;
+    m_hoverPoint = point;
+
+    if (pauseAfterFirstScroll && mode == SeekMode::Drag) {
+        pauseAfterFirstScroll = false;
+        pausedForScrolling = true;
+        m_pMainFrame->MediaControlPause();
+    }
+
+    m_pMainFrame->SeekTo(m_rtPos, true, mode);
 }
 
 long CPlayerSeekBar::ChannelPointFromPosition(REFERENCE_TIME rtPos) const
@@ -997,7 +988,7 @@ void CPlayerSeekBar::OnLButtonDown(UINT nFlags, CPoint point)
         SetCapture();
         m_bDraggingThumb = true;
         MoveThumb(point);
-        CheckScrollDistance(point, 0ULL, 0LL);
+        SeekToThumb(point, SeekMode::Default);
         invalidateThumb();
     } else {
         if (!m_pMainFrame->m_fFullScreen) {
@@ -1015,9 +1006,9 @@ void CPlayerSeekBar::OnLButtonDblClk(UINT nFlags, CPoint point)
 void CPlayerSeekBar::OnLButtonUp(UINT nFlags, CPoint point)
 {
     if (DraggingThumb()) {
+        MoveThumb(point);
+        SeekToThumb(point, SeekMode::DragEnd);
         ReleaseCapture();
-        // update video position if seekbar moved at least 250 ms or 1/100th of duration
-        CheckScrollDistance(point, std::min(2500000LL, m_rtStop / 100), 0LL);
         invalidateThumb();
         pauseAfterFirstScroll = false;
         if (pausedForScrolling) {
@@ -1085,7 +1076,7 @@ void CPlayerSeekBar::OnMouseMove(UINT nFlags, CPoint point)
     if (DraggingThumb() && (nFlags & MK_LBUTTON)) {
         MoveThumb(point);
 
-        CheckScrollDistance(point, 0LL, 33LL);
+        SeekToThumb(point, SeekMode::Drag);
     }
 
     if (AfxGetAppSettings().fUseSeekbarHover) {

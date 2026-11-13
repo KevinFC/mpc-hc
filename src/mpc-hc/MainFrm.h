@@ -147,10 +147,17 @@ public:
     int vinput, vchannel, ainput;
 };
 
+enum class SeekMode {
+    Default,
+    Drag,
+    DragEnd
+};
+
 struct SeekToCommand {
     REFERENCE_TIME rtPos;
     ULONGLONG seekTime;
     bool bShowOSD;
+    SeekMode mode = SeekMode::Default;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -687,11 +694,12 @@ public:
     bool GetKeyFrame(REFERENCE_TIME rtTarget, REFERENCE_TIME rtMin, REFERENCE_TIME rtMax, bool nearest, REFERENCE_TIME& keyframetime) const;
     REFERENCE_TIME GetClosestKeyFrame(REFERENCE_TIME rtTarget, REFERENCE_TIME rtMaxForwardDiff, REFERENCE_TIME rtMaxBackwardDiff) const;
     REFERENCE_TIME GetClosestKeyFramePreview(REFERENCE_TIME rtTarget) const;
-    void SeekTo(REFERENCE_TIME rt, bool bShowOSD = true);
+    void SeekTo(REFERENCE_TIME rt, bool bShowOSD = true, SeekMode mode = SeekMode::Default);
     void DoSeekTo(REFERENCE_TIME rt, bool bShowOSD = true);
     SeekToCommand queuedSeek;
     ULONGLONG lastSeekStart;
     ULONGLONG lastSeekFinish;
+    bool seekInProgress = false;
     void SetPlayingRate(double rate);
 
     int SetupAudioStreams();

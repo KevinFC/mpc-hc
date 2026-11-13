@@ -2812,12 +2812,14 @@ void CMainFrame::OnTimer(UINT_PTR nIDEvent)
         case TIMER_HIDER:
             m_timerHider.NotifySubscribers();
             break;
-        case TIMER_DELAYEDSEEK:
-            KillTimer(TIMER_DELAYEDSEEK);
-            if (queuedSeek.seekTime > 0) {
-                SeekTo(queuedSeek.rtPos, queuedSeek.bShowOSD);
+        case TIMER_DELAYEDSEEK: {
+            const auto pendingSeek = queuedSeek;
+            KillTimerDelayedSeek();
+            if (pendingSeek.seekTime > 0) {
+                SeekTo(pendingSeek.rtPos, pendingSeek.bShowOSD, pendingSeek.mode);
             }
             break;
+        }
         default:
             if (nIDEvent >= TIMER_ONETIME_START && nIDEvent <= TIMER_ONETIME_END) {
                 m_timerOneTime.NotifySubscribers(nIDEvent);
@@ -14751,27 +14753,49 @@ REFERENCE_TIME CMainFrame::GetClosestKeyFramePreview(REFERENCE_TIME rtTarget) co
     return GetClosestKeyFrame(rtTarget, 200000000LL, 200000000LL);
 }
 
-void CMainFrame::SeekTo(REFERENCE_TIME rtPos, bool bShowOSD /*= true*/)
+void CMainFrame::SeekTo(REFERENCE_TIME rtPos, bool bShowOSD /*= true*/, SeekMode mode /*= SeekMode::Default*/)
 {
     if (m_graph.m_pMS.p == nullptr) {
         ASSERT(false);
         return;
     }
-    ASSERT(lastSeekFinish >= lastSeekStart); // ToDo: remove lastSeekStart variable if no regressions show up
-    ULONGLONG curTime = GetTickCount64();
-    ULONGLONG ticksSinceLastSeek = curTime - lastSeekFinish;
-    ULONGLONG mindelay = (lastSeekFinish - lastSeekStart) > 40ULL ? 100ULL : 40ULL;
-    //ASSERT(rtPos != queuedSeek.rtPos || queuedSeek.seekTime == 0 || (curTime < queuedSeek.seekTime + 500ULL));
 
-    if (ticksSinceLastSeek < mindelay) {
-        //TRACE(_T("Delay seek: %lu %lu\n"), rtPos, ticksSinceLastSeek);
-        queuedSeek = { rtPos, curTime, bShowOSD };
-        SetTimer(TIMER_DELAYEDSEEK, (UINT) (mindelay * 1.25 - ticksSinceLastSeek), nullptr);
-    } else {
-        KillTimerDelayedSeek();
-        lastSeekStart = curTime;
-        DoSeekTo(rtPos, bShowOSD);
-        lastSeekFinish = GetTickCount64();
+    const ULONGLONG curTime = GetTickCount64();
+    if (seekInProgress) {
+        queuedSeek = { rtPos, curTime, bShowOSD, mode };
+        return;
+    }
+
+    ULONGLONG delay = 0;
+    if (mode == SeekMode::Default) {
+        const ULONGLONG ticksSinceLastSeek = curTime - lastSeekFinish;
+        const ULONGLONG minDelay = (lastSeekFinish - lastSeekStart) > 40ULL ? 100ULL : 40ULL;
+        if (ticksSinceLastSeek < minDelay) {
+            delay = (ULONGLONG)(minDelay * 1.25 - ticksSinceLastSeek);
+        }
+    } else if (mode == SeekMode::Drag) {
+        const ULONGLONG ticksSinceLastStart = curTime - lastSeekStart;
+        if (ticksSinceLastStart < 33ULL) {
+            delay = 33ULL - ticksSinceLastStart;
+        }
+    }
+
+    if (delay > 0) {
+        queuedSeek = { rtPos, curTime, bShowOSD, mode };
+        SetTimer(TIMER_DELAYEDSEEK, (UINT)delay, nullptr);
+        return;
+    }
+
+    KillTimerDelayedSeek();
+    seekInProgress = true;
+    lastSeekStart = curTime;
+    DoSeekTo(rtPos, bShowOSD);
+    lastSeekFinish = GetTickCount64();
+    seekInProgress = false;
+
+    // DirectShow can pump input messages during a seek; retain only their latest target.
+    if (queuedSeek.seekTime > 0) {
+        SetTimer(TIMER_DELAYEDSEEK, 1, nullptr);
     }
 }
 

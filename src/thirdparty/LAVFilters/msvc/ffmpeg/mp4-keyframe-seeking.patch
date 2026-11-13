@@ -1,0 +1,60 @@
+diff --git a/libavformat/mov.c b/libavformat/mov.c
+--- a/libavformat/mov.c
++++ b/libavformat/mov.c
+@@ -13087,15 +13087,22 @@
+ 
+ static int mov_seek_stream(AVFormatContext *s, AVStream *st, int64_t timestamp, int flags)
+ {
++    MOVContext *mov = s->priv_data;
+     MOVStreamContext *sc = st->priv_data;
+     FFStream *const sti = ffstream(st);
+     int sample, time_sample, ret, requested_sample;
+     int64_t next_ts;
++    const int64_t requested_pts = timestamp;
++    const int seek_by_pts = st->codecpar->codec_id == AV_CODEC_ID_H264 &&
++                            sc->ctts_count && !mov->frag_index.nb_items &&
++                            (flags & AVSEEK_FLAG_BACKWARD) && !(flags & AVSEEK_FLAG_ANY);
++
+     unsigned int i;
+ 
+-    // Here we consider timestamp to be PTS, hence try to offset it so that we
+-    // can search over the DTS timeline.
+-    timestamp -= (sc->min_corrected_pts + sc->dts_shift);
++    // H.264 keyframes can have different PTS-DTS offsets. Start at a DTS
++    // upper bound and refine using each candidate's actual presentation time.
++    if (!seek_by_pts)
++        timestamp -= (sc->min_corrected_pts + sc->dts_shift);
+ 
+     ret = mov_seek_fragment(s, st, timestamp);
+     if (ret < 0)
+@@ -13108,6 +13115,30 @@
+             sample = 0;
+         if (sample < 0) /* not sure what to do */
+             return AVERROR_INVALIDDATA;
++
++        if (seek_by_pts && sample > 0) {
++            int64_t offset = sc->min_corrected_pts;
++            if (sample < sc->sample_offsets_count) {
++                offset = sc->sample_offsets[sample];
++            } else {
++                int64_t remaining = sample;
++                for (i = 0; i < sc->tts_count; i++) {
++                    if (remaining < sc->tts_data[i].count) {
++                        offset = sc->tts_data[i].offset;
++                        break;
++                    }
++                    remaining -= sc->tts_data[i].count;
++                }
++            }
++
++            const int64_t sample_pts = av_sat_add64(sti->index_entries[sample].timestamp,
++                                                   av_sat_add64(offset, sc->dts_shift));
++
++            if (sample_pts > requested_pts) {
++                timestamp = av_sat_add64(sti->index_entries[sample].timestamp, -1);
++                continue;
++            }
++        }
+ 
+         if (!sample || can_seek_to_key_sample(st, sample, timestamp))
+             break;

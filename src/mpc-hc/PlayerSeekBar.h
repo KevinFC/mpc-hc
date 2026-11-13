@@ -27,6 +27,7 @@
 #include "CMPCThemeToolTipCtrl.h"
 
 class CMainFrame;
+enum class SeekMode;
 
 class CPlayerSeekBar : public CDialogBar
 {
@@ -51,7 +52,6 @@ private:
     CPoint m_hoverPoint;
     HCURSOR m_cursor;
     bool m_bDraggingThumb, m_bHoverThumb;
-    ULONGLONG m_lastDragSeekTickCount;
     bool pauseAfterFirstScroll = false;
     bool pausedForScrolling = false;
 
@@ -92,10 +92,9 @@ private:
     virtual CSize CalcFixedLayout(BOOL bStretch, BOOL bHorz) override;
 
     void MoveThumb(const CPoint& point);
-    void SyncVideoToThumb();
+    void SeekToThumb(CPoint point, SeekMode mode);
     void checkHover(CPoint point);
     void invalidateThumb();
-    void CheckScrollDistance(CPoint point, REFERENCE_TIME minimum_duration_change, ULONGLONG minimum_elapsed_tickcount);
     long ChannelPointFromPosition(REFERENCE_TIME rtPos) const;
     REFERENCE_TIME PositionFromClientPoint(const CPoint& point) const;
     void SyncThumbToVideo(REFERENCE_TIME rtPos, REFERENCE_TIME rtPosDraw);

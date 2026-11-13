@@ -20,6 +20,21 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="$(MSBuildThisFileDirectory)ffmpeg-linker.props" />
   <ItemGroup>
+    <ClCompile Remove="$(FFmpegSrc)libavformat\mov.c" />
+    <ClCompile Include="$(IntDir)patched\libavformat\mov.c">
+      <ObjectFileName>$(IntDir)libavformat\mov.obj</ObjectFileName>
+      <AdditionalIncludeDirectories>$(FFmpegSrc)libavformat;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemGroup>
+  <Target Name="PatchMp4KeyframeSeeking" BeforeTargets="ClCompile"
+          Inputs="$(FFmpegSrc)libavformat\mov.c;$(MSBuildThisFileDirectory)mp4-keyframe-seeking.patch;$(MSBuildProjectFullPath)"
+          Outputs="$(IntDir)patched\libavformat\mov.c;$(IntDir)patched\applied.stamp">
+    <MakeDir Directories="$(IntDir)patched\libavformat" />
+    <Copy SourceFiles="$(FFmpegSrc)libavformat\mov.c" DestinationFiles="$(IntDir)patched\libavformat\mov.c" />
+    <Exec WorkingDirectory="$(MpcRoot)" Command="git apply --verbose --unsafe-paths --directory=&quot;$(IntDir)patched&quot; &quot;$(MSBuildThisFileDirectory)mp4-keyframe-seeking.patch&quot;" />
+    <Touch Files="$(IntDir)patched\applied.stamp" AlwaysCreate="true" />
+  </Target>
+  <ItemGroup>
     <ProjectReference Include="$(MSBuildThisFileDirectory)avutil.vcxproj"><LinkLibraryDependencies>false</LinkLibraryDependencies></ProjectReference>
     <ProjectReference Include="$(MSBuildThisFileDirectory)avcodec.vcxproj"><LinkLibraryDependencies>false</LinkLibraryDependencies></ProjectReference>
     <ProjectReference Include="$(MSBuildThisFileDirectory)swresample.vcxproj"><LinkLibraryDependencies>false</LinkLibraryDependencies></ProjectReference>
