@@ -39,12 +39,13 @@ public:
     virtual BOOL Create(CWnd* pParentWnd);
 
 private:
-    enum { TIMER_SHOWHIDE_TOOLTIP = 1 };
+    enum { TIMER_SHOWHIDE_TOOLTIP = 1, TIMER_PREVIEW_SEEK };
 
     CMainFrame* m_pMainFrame;
     REFERENCE_TIME m_rtStart, m_rtStop, m_rtPos, m_rtPosDraw;
 	REFERENCE_TIME m_pos_preview = 0;
     LONG m_last_pointx_preview = 0;
+    ULONGLONG m_lastPreviewSeekTick = 0;
 
     bool m_bEnabled;
     bool m_bHasDuration;

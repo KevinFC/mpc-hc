@@ -1119,6 +1119,12 @@ void CPlayerSeekBar::OnTimer(UINT_PTR nIDEvent)
     VERIFY(GetCursorPos(&point));
     ScreenToClient(&point);
     switch (nIDEvent) {
+        case TIMER_PREVIEW_SEEK:
+            KillTimer(TIMER_PREVIEW_SEEK);
+            if (m_bHasDuration && GetSeekableRect().PtInRect(point)) {
+                PreviewWindowShow(point);
+            }
+            break;
         case TIMER_SHOWHIDE_TOOLTIP:
             if (m_tooltipState == TOOLTIP_TRIGGERED && m_bHasDuration) {
                 m_tooltipPoint = point;
@@ -1145,6 +1151,7 @@ void CPlayerSeekBar::OnTimer(UINT_PTR nIDEvent)
 
 void CPlayerSeekBar::OnMouseLeave()
 {
+    KillTimer(TIMER_PREVIEW_SEEK);
     HideToolTip();
     m_pMainFrame->PreviewWindowHide();
     m_bIgnoreLastTooltipPoint = true;
@@ -1179,6 +1186,15 @@ void CPlayerSeekBar::OnCaptureChanged(CWnd* pWnd)
 
 void CPlayerSeekBar::PreviewWindowShow(CPoint point) {
     if ((point.x != m_last_pointx_preview || m_bIgnoreLastTooltipPoint) && !DraggingThumb()) {
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG elapsed = now - m_lastPreviewSeekTick;
+        // Let a preview frame arrive before another seek flushes the decoder.
+        if (!m_bIgnoreLastTooltipPoint && m_pMainFrame->m_wndPreView.IsWindowVisible() && elapsed < 33ULL) {
+            SetTimer(TIMER_PREVIEW_SEEK, (UINT)(33ULL - elapsed), nullptr);
+            return;
+        }
+
+        KillTimer(TIMER_PREVIEW_SEEK);
         m_bIgnoreLastTooltipPoint = false;
         m_last_pointx_preview = point.x;
         if (m_pMainFrame->CanPreviewUse()) {
@@ -1189,6 +1205,7 @@ void CPlayerSeekBar::PreviewWindowShow(CPoint point) {
                 }
             }
             if (newpos != m_pos_preview || !m_pMainFrame->m_wndPreView.IsWindowVisible()) {
+                m_lastPreviewSeekTick = now;
                 m_pos_preview = newpos;
                 UpdateToolTipTextPreview(m_pos_preview);
                 m_pMainFrame->PreviewWindowShow(m_pos_preview);

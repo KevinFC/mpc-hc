@@ -602,6 +602,7 @@ HRESULT CFGFilterLAVVideo::Create(IBaseFilter** ppBF, CInterfaceList<IUnknown, &
 
             if (SUCCEEDED(hr)) {
                 if (isPreview) {
+                    pLAVFSettings->SetHWAccel(HWAccel_D3D11);
                     pLAVFSettings->SetNumThreads(2);
                     pLAVFSettings->SetPixelFormat(LAVOutPixFmt_P010, false);
                     pLAVFSettings->SetPixelFormat(LAVOutPixFmt_P016, false);
