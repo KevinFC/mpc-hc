@@ -291,7 +291,7 @@ struct AutoChangeFullscreenMode {
     unsigned                    uDelay = 0u;
 };
 
-#define ACCEL_LIST_SIZE 226
+#define ACCEL_LIST_SIZE 231
 
 struct wmcmd_base : public ACCEL {
     BYTE mouse;
@@ -904,6 +904,10 @@ public:
     bool            bLosslessCutRestrict;
     bool            bLosslessCutLoop;
     bool            bLosslessCutShowList;
+    bool            bSeekbarToolButtons;
+    bool            bSeekbarSmoothDrag;
+    bool            bSeekbarExactDrag;      // dragging and the hover preview ignore keyframes
+    int             iSeekbarSmoothStrength; // 1..10
     CString         strOSDFont;
     int             nOSDSize;
     bool            bHideWindowedMousePointer;

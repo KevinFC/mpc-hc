@@ -154,6 +154,12 @@
     <ClCompile Include="PlayerSeekBar.cpp">
       <Filter>Toolbars</Filter>
     </ClCompile>
+    <ClCompile Include="PlayerSeekBarTools.cpp">
+      <Filter>Toolbars</Filter>
+    </ClCompile>
+    <ClCompile Include="SeekBarToolButtons.cpp">
+      <Filter>Toolbars</Filter>
+    </ClCompile>
     <ClCompile Include="PlayerStatusBar.cpp">
       <Filter>Toolbars</Filter>
     </ClCompile>
@@ -734,6 +740,9 @@
       <Filter>Modal Dialogs</Filter>
     </ClInclude>
     <ClInclude Include="PlayerSeekBar.h">
+      <Filter>Toolbars</Filter>
+    </ClInclude>
+    <ClInclude Include="SeekBarToolButtons.h">
       <Filter>Toolbars</Filter>
     </ClInclude>
     <ClInclude Include="PlayerStatusBar.h">

@@ -109,6 +109,7 @@ static std::vector<int> supportedSvgButtonsSeq;
 IMPLEMENT_DYNAMIC(CPlayerToolBar, CToolBar)
 CPlayerToolBar::CPlayerToolBar(CMainFrame* pMainFrame)
     : m_pMainFrame(pMainFrame)
+    , m_seekTools(pMainFrame)
     , m_nButtonHeight(16)
     , m_volumeCtrlSize(60)
     , volumeButtonIndex(12)
@@ -439,6 +440,7 @@ BOOL CPlayerToolBar::Create(CWnd* pParentWnd)
 
     m_volctrl.Create(this);
     m_volctrl.SetRange(0, 100);
+    m_seekTools.Create(this);
 
     m_nButtonHeight = 16; // reset m_nButtonHeight
 
@@ -623,6 +625,11 @@ void CPlayerToolBar::ArrangeControls() {
     GetItemRect(volumeButtonIndex, &rVolumeButton);
     int volumeButtonWidth = rVolumeButton.Width();
 
+    // the seekbar's buttons follow the last button, at the start of the spacer before the volume
+    const int seekToolButtonWidth = LOWORD(GetToolBarCtrl().GetButtonSize());
+    const int seekToolsWidth = m_seekTools.GetGroupWidth(seekToolButtonWidth);
+    dynamicButtonsWidth += seekToolsWidth;
+
     int groupSpacing = CalculateGroupSpacing(volumeButtonWidth);
 
     int totalContentWidth = dynamicButtonsWidth + volumeButtonWidth + m_volumeCtrlSize;
@@ -662,7 +669,13 @@ void CPlayerToolBar::ArrangeControls() {
     m_volctrl.MoveWindow(vr);
 
     SetSeparatorWidth(leftSeparatorIndex, leftSpacing);
-    SetSeparatorWidth(dummySeparatorIndex, rightSpacing);
+    SetSeparatorWidth(dummySeparatorIndex, rightSpacing + seekToolsWidth);
+
+    CRect rSpacer;
+    GetItemRect(dummySeparatorIndex, &rSpacer);
+    GetItemRect(volumeButtonIndex, &rVolumeButton);
+    m_seekTools.Place(seekToolsWidth ? CRect(rSpacer.left, rVolumeButton.top, rSpacer.left + seekToolsWidth, rVolumeButton.bottom) : CRect(),
+                      seekToolButtonWidth);
 }
 
 void CPlayerToolBar::SetMute(bool fMute) {
@@ -731,7 +744,8 @@ int CPlayerToolBar::GetMinWidth() const
 
     int groupSpacing = CalculateGroupSpacing(m_nButtonHeight + TOOLBAR_BUTTON_HORIZONTAL_PADDING);
 
-    return buttonCount * (m_nButtonHeight + 1 + TOOLBAR_BUTTON_HORIZONTAL_PADDING) + 2 * groupSpacing + m_volumeCtrlSize;
+    return buttonCount * (m_nButtonHeight + 1 + TOOLBAR_BUTTON_HORIZONTAL_PADDING) + 2 * groupSpacing + m_volumeCtrlSize
+           + m_seekTools.GetGroupWidth(m_nButtonHeight + TOOLBAR_BUTTON_HORIZONTAL_PADDING);
 }
 
 void CPlayerToolBar::SetVolume(int volume)
@@ -826,6 +840,7 @@ void CPlayerToolBar::OnCustomDraw(NMHDR* pNMHDR, LRESULT* pResult)
     switch (pTBCD->nmcd.dwDrawStage) {
         case CDDS_PREERASE:
             m_volctrl.Invalidate();
+            m_seekTools.Invalidate(FALSE);
             lr = CDRF_DODEFAULT;
             break;
         case CDDS_PREPAINT: {

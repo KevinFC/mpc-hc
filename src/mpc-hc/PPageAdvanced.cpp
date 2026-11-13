@@ -216,6 +216,11 @@ void CPPageAdvanced::InitSettings()
     addCStringItem(LLC_PATH, IDS_RS_LLC_PATH, _T(""), s.strLosslessCutPath, StrRes(IDS_PPAGEADVANCED_LLC_PATH));
     addBoolItem(LLC_AUTO_ENABLE, IDS_RS_LLC_AUTO_ENABLE, true, s.bLosslessCutAutoEnable, StrRes(IDS_PPAGEADVANCED_LLC_AUTO));
 
+    addHeaderItem(ResStr(IDS_PPAGEADVANCED_GRP_SEEKBAR_TOOLS));
+    addBoolItem(SEEKBAR_TOOL_BUTTONS, IDS_RS_SEEKBAR_TOOL_BUTTONS, true, s.bSeekbarToolButtons, StrRes(IDS_PPAGEADVANCED_SEEKBAR_TOOLS));
+    addBoolItem(SEEKBAR_SMOOTH_DRAG, IDS_RS_SEEKBAR_SMOOTH_DRAG, false, s.bSeekbarSmoothDrag, StrRes(IDS_PPAGEADVANCED_SMOOTH_DRAG));
+    addBoolItem(SEEKBAR_EXACT_DRAG, IDS_RS_SEEKBAR_EXACT_DRAG, false, s.bSeekbarExactDrag, StrRes(IDS_PPAGEADVANCED_EXACT_DRAG));
+    addIntItem(SEEKBAR_SMOOTH_STRENGTH, IDS_RS_SEEKBAR_SMOOTH_STRENGTH, 5, s.iSeekbarSmoothStrength, std::make_pair(1, 10), StrRes(IDS_PPAGEADVANCED_SMOOTH_STRENGTH));
 
     addHeaderItem(L"yt-dlp");
     addBoolItem(USE_YDL, IDS_RS_USE_YDL, true, s.bUseYDL, StrRes(IDS_PPAGEADVANCED_USE_YDL));

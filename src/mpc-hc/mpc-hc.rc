@@ -4393,6 +4393,16 @@ BEGIN
     IDS_PPAGEADVANCED_LLC_AUTO "Turn on LosslessCut mode automatically when a LosslessCut project (<name>-proj.llc) exists next to the opened file."
     IDS_LLC_TOGGLE_SEGMENT_LIST "LosslessCut: Show segment list"
     IDS_LLC_SEGMENTS_CAPTION "Segments"
+    IDS_SEEKBAR_SMOOTH_DRAG "Seekbar: Smooth drag seeking"
+    IDS_SEEKBAR_ZOOM_IN     "Seekbar: Zoom in"
+    IDS_SEEKBAR_ZOOM_OUT    "Seekbar: Zoom out"
+    IDS_SEEKBAR_ZOOM_RESET  "Seekbar: Show the whole timeline"
+    IDS_PPAGEADVANCED_GRP_SEEKBAR_TOOLS "Seekbar zoom and smooth dragging"
+    IDS_PPAGEADVANCED_SEEKBAR_TOOLS "Show the smooth drag, exact seeking and zoom buttons after the buttons of the controls toolbar. Ctrl+mouse wheel over the seekbar zooms either way."
+    IDS_PPAGEADVANCED_SMOOTH_DRAG "Smooth drag seeking: while dragging the seekbar, the playhead glides after the mouse (to exact frames) and stops where it is when you let go."
+    IDS_PPAGEADVANCED_SMOOTH_STRENGTH "How smooth (and slow to follow) smooth drag seeking is, from 1 (barely) to 10 (very). You can also scroll the mouse wheel over the smooth drag button."
+    IDS_SEEKBAR_EXACT_DRAG  "Seekbar: Exact seeking (ignore keyframes)"
+    IDS_PPAGEADVANCED_EXACT_DRAG "Exact seeking: dragging the seekbar and the hover preview go to exact frames instead of the nearest keyframes. Shift does the same while this is off."
 END
 
 #endif    // English (United States) resources

@@ -22,6 +22,7 @@
 #pragma once
 
 #include "VolumeCtrl.h"
+#include "SeekBarToolButtons.h"
 #include "CMPCThemeToolTipCtrl.h"
 #include "CMPCThemeUtil.h"
 #include <atlimage.h>
@@ -116,6 +117,7 @@ public:
     CImage& GetVolumeImageOff() { return volumeOff; };
 
     CVolumeCtrl m_volctrl;
+    CSeekBarToolButtons m_seekTools;     // smooth drag, exact drag and zoom, after the last button
 
     std::optional<bool> lastFullscreen = std::nullopt;
     void SetFullscreen(bool isFS);

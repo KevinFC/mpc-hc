@@ -7235,6 +7235,7 @@ void CMainFrame::ApplyTimeOnSeekBarChange()
     m_wndStatusBar.Relayout();
     m_wndSeekBar.UpdateTime();
     m_wndSeekBar.Invalidate();
+    m_wndToolBar.ArrangeControls(); // the seekbar's buttons on it may have been turned on or off
 }
 
 void CMainFrame::OnUpdateViewNormal(CCmdUI* pCmdUI)

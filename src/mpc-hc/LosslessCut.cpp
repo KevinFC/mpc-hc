@@ -120,16 +120,7 @@ void CLosslessCutController::NotifyChanged(bool bLayout)
         auto& bar = static_cast<CControlBar&>(m_frame.m_wndSeekBar);
         const int before = bar.CalcFixedLayout(TRUE, TRUE).cy;
         m_frame.m_wndSeekBar.SetLosslessCutMode(m_bActive);
-        const int after = bar.CalcFixedLayout(TRUE, TRUE).cy;
-        if (after != before && m_frame.m_wndSeekBar.IsWindowVisible() && !m_frame.IsZoomed() && !m_frame.IsIconic() &&
-                !m_frame.IsFullScreenMode() && !m_frame.m_controls.ToolbarsCoverVideo()) {
-            // Grow/shrink the window like toggling a toolbar does, so the video keeps its size.
-            CRect r;
-            m_frame.GetWindowRect(r);
-            r.bottom += after - before;
-            m_frame.MoveWindow(r);
-        }
-        m_frame.RecalcLayout();
+        m_frame.m_wndSeekBar.RelayoutAfterHeightChange(before);
         SyncSegmentList();
     }
     m_frame.m_wndSeekBar.OnLosslessCutChanged();

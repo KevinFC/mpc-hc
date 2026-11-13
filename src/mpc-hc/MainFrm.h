@@ -761,6 +761,7 @@ protected:  // control bar embedded members
     friend class CPPageToolBar;
     CMainFrameControls m_controls;
     friend class CPlayerBar; // it notifies m_controls of panel re-dock
+    friend class CSeekBarToolButtons; // the seekbar's buttons on the controls toolbar act on m_wndSeekBar
 
     CChildView m_wndView;
 

@@ -265,6 +265,8 @@ if not exist "$(OutDir)LAVFilters" if exist "$(SolutionDir)bin\mpc-hc_x86\LAVFil
     <ClCompile Include="PlayerPlaylistBar.cpp" />
     <ClCompile Include="PlayerPreView.cpp" />
     <ClCompile Include="PlayerSeekBar.cpp" />
+    <ClCompile Include="PlayerSeekBarTools.cpp" />
+    <ClCompile Include="SeekBarToolButtons.cpp" />
     <ClCompile Include="PlayerStatusBar.cpp" />
     <ClCompile Include="PlayerSubresyncBar.cpp" />
     <ClCompile Include="PlayerToolBar.cpp" />
@@ -490,6 +492,7 @@ if not exist "$(OutDir)LAVFilters" if exist "$(SolutionDir)bin\mpc-hc_x86\LAVFil
     <ClInclude Include="PlayerPlaylistBar.h" />
     <ClInclude Include="PlayerPreView.h" />
     <ClInclude Include="PlayerSeekBar.h" />
+    <ClInclude Include="SeekBarToolButtons.h" />
     <ClInclude Include="PlayerStatusBar.h" />
     <ClInclude Include="PlayerSubresyncBar.h" />
     <ClInclude Include="PlayerToolBar.h" />

@@ -259,6 +259,10 @@ private:
         SUB_GLYPH_CACHE_MB,
         LLC_PATH,
         LLC_AUTO_ENABLE,
+        SEEKBAR_TOOL_BUTTONS,
+        SEEKBAR_SMOOTH_DRAG,
+        SEEKBAR_EXACT_DRAG,
+        SEEKBAR_SMOOTH_STRENGTH,
     };
 
     static constexpr DWORD_PTR HEADER_ITEM_DATA = (DWORD_PTR)-1;

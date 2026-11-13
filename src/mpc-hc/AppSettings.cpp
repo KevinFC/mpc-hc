@@ -221,6 +221,10 @@ CAppSettings::CAppSettings()
     , bLosslessCutRestrict(false)
     , bLosslessCutLoop(false)
     , bLosslessCutShowList(true)
+    , bSeekbarToolButtons(true)
+    , bSeekbarSmoothDrag(false)
+    , bSeekbarExactDrag(false)
+    , iSeekbarSmoothStrength(5)
     , nOSDSize(0)
     , bHideWindowedMousePointer(true)
     , iBrightness(0)
@@ -658,6 +662,11 @@ static constexpr wmcmd_base default_wmcmds[] = {
     { ID_LLC_TOGGLE_SELECTED,               0, 0,                 IDS_LLC_TOGGLE_SELECTED },
     { ID_LLC_LAUNCH,                        0, 0,                 IDS_LLC_LAUNCH },
     { ID_LLC_TOGGLE_SEGMENT_LIST,           0, 0,                 IDS_LLC_TOGGLE_SEGMENT_LIST },
+    { ID_SEEKBAR_SMOOTH_DRAG,               0, 0,                 IDS_SEEKBAR_SMOOTH_DRAG },
+    { ID_SEEKBAR_EXACT_DRAG,                0, 0,                 IDS_SEEKBAR_EXACT_DRAG },
+    { ID_SEEKBAR_ZOOM_IN,                   0, 0,                 IDS_SEEKBAR_ZOOM_IN },
+    { ID_SEEKBAR_ZOOM_OUT,                  0, 0,                 IDS_SEEKBAR_ZOOM_OUT },
+    { ID_SEEKBAR_ZOOM_RESET,                0, 0,                 IDS_SEEKBAR_ZOOM_RESET },
     { ID_NAVIGATE_SKIPFORWARD,        VK_NEXT, 0,                 IDS_AG_NEXT,        APPCOMMAND_MEDIA_NEXTTRACK, wmcmd::X2DOWN },
     { ID_NAVIGATE_SKIPBACK,          VK_PRIOR, 0,                 IDS_AG_PREVIOUS,    APPCOMMAND_MEDIA_PREVIOUSTRACK, wmcmd::X1DOWN },
     { ID_NAVIGATE_SKIPFORWARDFILE,    VK_NEXT, FCONTROL,          IDS_AG_NEXT_FILE },
@@ -1212,6 +1221,10 @@ void CAppSettings::SaveSettings(bool write_full_history /* = false */)
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_RESTRICT, bLosslessCutRestrict);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_LOOP, bLosslessCutLoop);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_SHOW_LIST, bLosslessCutShowList);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_TOOL_BUTTONS, bSeekbarToolButtons);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_SMOOTH_DRAG, bSeekbarSmoothDrag);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_EXACT_DRAG, bSeekbarExactDrag);
+    pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_SMOOTH_STRENGTH, iSeekbarSmoothStrength);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CONTROLSTATE, nCustomPresetControlState);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CAPTION, nCustomPresetCaption);
     pApp->WriteProfileInt(IDS_R_SETTINGS, IDS_RS_STARTUP_PRESET, nStartupPreset);
@@ -1867,6 +1880,10 @@ void CAppSettings::LoadSettings()
     bLosslessCutRestrict = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_RESTRICT, FALSE);
     bLosslessCutLoop = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_LOOP, FALSE);
     bLosslessCutShowList = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_LLC_SHOW_LIST, TRUE);
+    bSeekbarToolButtons = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_TOOL_BUTTONS, TRUE);
+    bSeekbarSmoothDrag = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_SMOOTH_DRAG, FALSE);
+    bSeekbarExactDrag = !!pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_EXACT_DRAG, FALSE);
+    iSeekbarSmoothStrength = std::clamp((int)pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_SEEKBAR_SMOOTH_STRENGTH, 5), 1, 10);
     nCustomPresetControlState = pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CONTROLSTATE, CS_SEEKBAR | CS_TOOLBAR);
     nCustomPresetControlState &= (CS_SEEKBAR | CS_TOOLBAR | CS_INFOBAR | CS_STATSBAR | CS_STATUSBAR); // drop invalid bits
     nCustomPresetCaption = pApp->GetProfileInt(IDS_R_SETTINGS, IDS_RS_CUSTOM_PRESET_CAPTION, MODE_HIDEMENU);

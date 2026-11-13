@@ -96,6 +96,11 @@ BOOL CPlayerSeekBar::Create(CWnd* pParentWnd)
 
     m_tooltip.SendMessage(TTM_ADDTOOL, 0, (LPARAM)&m_ti);
 
+    // the smooth drag and zoom buttons, and the zoom overview, have ordinary hover tooltips
+    m_toolTip.Create(this, TTS_ALWAYSTIP | TTS_NOPREFIX);
+    m_toolTip.SetMaxTipWidth(m_pMainFrame->m_dpi.ScaleX(420));
+    m_toolTip.Activate(TRUE);
+
     // The LosslessCut strip is a child; keep the bar's own painting off it.
     ModifyStyle(0, WS_CLIPCHILDREN);
     llcui::EnsureGdiplus();
@@ -153,6 +158,7 @@ CSize CPlayerSeekBar::CalcFixedLayout(BOOL bStretch, BOOL bHorz)
         // the timeline keeps its normal height; only the control strip is added below it
         ret.cy += LlcStripHeight();
     }
+    ret.cy += OverviewHeight(); // the zoom overview sits above the channel while zoomed in
     if (!m_pMainFrame->m_controls.ControlChecked(CMainFrameControls::Toolbar::CONTROLS)) {
         ret.cy += ADD_TO_BOTTOM_WITHOUT_CONTROLBAR;
     }
@@ -230,10 +236,17 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
     CBitmap* oldBmp = mem.SelectObject(&bmp);
     mem.FillSolidRect(0, 0, w, h, pal.channel);
 
-    const double span = static_cast<double>(m_rtStop - m_rtStart);
+    const double viewStart = static_cast<double>(ViewStart());
+    const double span = ViewSpan();
     auto X = [&](REFERENCE_TIME t) {
-        const double x = (t - m_rtStart) * w / span;
-        return static_cast<REAL>(std::clamp(x, 0.0, static_cast<double>(w)));
+        const double x = (t - viewStart) * w / span;
+        return static_cast<REAL>(std::clamp(x, -1.0, w + 1.0));
+    };
+    const REFERENCE_TIME vs = ViewStart(), ve = ViewStop();
+    auto visible = [&](const llc::Segment& seg) {
+        const REFERENCE_TIME a = CLosslessCutController::ToRT(seg.start);
+        const REFERENCE_TIME b = seg.IsMarker() ? a : CLosslessCutController::ToRT(*seg.end);
+        return b >= vs && a <= ve;
     };
 
     // segment number font, sized to the channel
@@ -272,7 +285,7 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
                 const REAL tl = static_cast<REAL>(dpi.ScaleY(3));
                 for (DWORD i = 0; i < m_pChapterBag->ChapGetCount(); i++) {
                     REFERENCE_TIME rtChap;
-                    if (SUCCEEDED(m_pChapterBag->ChapGet(i, &rtChap, nullptr))) {
+                    if (SUCCEEDED(m_pChapterBag->ChapGet(i, &rtChap, nullptr)) && InView(rtChap)) {
                         const REAL x = X(rtChap);
                         g.FillRectangle(&tick, x, 0.0f, 1.0f, tl);
                         g.FillRectangle(&tick, x, h - tl, 1.0f, tl);
@@ -287,6 +300,9 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
 
         auto drawSegment = [&](int i) {
             const auto& seg = segs[i];
+            if (!visible(seg)) {
+                return;
+            }
             const REAL x0 = X(CLosslessCutController::ToRT(seg.start));
             if (seg.IsMarker()) {
                 // a start without an end yet: a flag
@@ -336,10 +352,10 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
         if (m_pMainFrame->CheckABRepeat(aPos, bPos)) {
             SolidBrush ab(llcui::ToGdi(AppIsThemeLoaded() ? CMPCTheme::SeekbarABColor : RGB(242, 13, 13)));
             const REAL t = static_cast<REAL>(dpi.ScaleX(2));
-            if (aPos) {
+            if (aPos && InView(aPos)) {
                 g.FillRectangle(&ab, X(aPos) - t / 2, 0.0f, t, static_cast<REAL>(h));
             }
-            if (bPos) {
+            if (bPos && InView(bPos)) {
                 g.FillRectangle(&ab, X(bPos) - t / 2, 0.0f, t, static_cast<REAL>(h));
             }
         }
@@ -352,7 +368,10 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
         const int padX = dpi.ScaleX(5);
         for (int i = 0; i < static_cast<int>(segs.size()); i++) {
             const auto& seg = segs[i];
-            const int x0 = static_cast<int>(X(CLosslessCutController::ToRT(seg.start)));
+            if (!visible(seg)) {
+                continue;
+            }
+            const int x0 = std::max(0, static_cast<int>(X(CLosslessCutController::ToRT(seg.start))));
             const int x1 = seg.IsMarker() ? x0 + dpi.ScaleX(40) : static_cast<int>(X(CLosslessCutController::ToRT(*seg.end)));
             CString label;
             label.Format(_T("%d"), i + 1);
@@ -379,7 +398,7 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
     }
 
     // playhead: a thin line with carets, outlined so it shows on any segment color
-    {
+    if (InView(m_rtPosDraw)) {
         Graphics g(mem.GetSafeHdc());
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
@@ -407,11 +426,18 @@ void CPlayerSeekBar::DrawLosslessCutChannel(CDC& dc, const CRect& channelRect)
 void CPlayerSeekBar::MoveThumb(const CPoint& point)
 {
     if (m_bHasDuration) {
-        REFERENCE_TIME rtPosDraw = PositionFromClientPoint(point);
+        MoveThumbToTime(PositionFromClientPoint(point));
+    }
+}
+
+void CPlayerSeekBar::MoveThumbToTime(REFERENCE_TIME rtPosDraw)
+{
+    if (m_bHasDuration) {
         REFERENCE_TIME rtPos = rtPosDraw;
         const CAppSettings& s = AfxGetAppSettings();
         REFERENCE_TIME duration = m_rtStop - m_rtStart;
-        if (duration >= 600000000LL && s.bFastSeek && (GetKeyState(VK_SHIFT) >= 0)) {
+        const bool bExact = IsExactDrag() || IsSmoothDrag() || GetKeyState(VK_SHIFT) < 0;
+        if (duration >= 600000000LL && s.bFastSeek && !bExact) {
             REFERENCE_TIME rtMaxDiff = s.bAllowInaccurateFastseek ? 200000000LL : std::min(100000000LL, duration / 30);
             rtPos = m_pMainFrame->GetClosestKeyFrame(rtPos, rtMaxDiff, rtMaxDiff);
         }
@@ -446,11 +472,12 @@ void CPlayerSeekBar::SeekToThumb(CPoint point, SeekMode mode)
 
 long CPlayerSeekBar::ChannelPointFromPosition(REFERENCE_TIME rtPos) const
 {
-    rtPos = std::min(m_rtStop, std::max(m_rtStart, rtPos));
+    const REFERENCE_TIME rtViewStart = ViewStart();
+    rtPos = std::min(ViewStop(), std::max(rtViewStart, rtPos));
     long ret = 0;
     auto w = GetChannelRect().Width();
     if (m_bHasDuration) {
-        ret = (long)(w * (rtPos - m_rtStart) / (m_rtStop - m_rtStart));
+        ret = (long)(w * (rtPos - rtViewStart) / ViewSpan());
     }
     if (ret >= w) {
         ret = w - 1;
@@ -467,7 +494,8 @@ REFERENCE_TIME CPlayerSeekBar::PositionFromClientPoint(const CPoint& point) cons
         auto channelPointX = (point.x < channelRect.left) ? channelRect.left :
                              (point.x > channelRect.right) ? channelRect.right : point.x;
         ASSERT(channelPointX >= channelRect.left && channelPointX <= channelRect.right);
-        rtRet = m_rtStart + (channelPointX - channelRect.left) * (m_rtStop - m_rtStart) / channelRect.Width();
+        rtRet = ViewStart() + (REFERENCE_TIME)((channelPointX - channelRect.left) * ViewSpan() / channelRect.Width());
+        rtRet = std::clamp(rtRet, m_rtStart, m_rtStop);
     }
     return rtRet;
 }
@@ -482,6 +510,17 @@ void CPlayerSeekBar::SyncThumbToVideo(REFERENCE_TIME rtPos, REFERENCE_TIME rtPos
         if (newThumbRect != m_lastThumbRect) {
             bSetTaskbar = true;
             InvalidateRect(newThumbRect | m_lastThumbRect);
+        }
+        if (OverviewHeight() > 0) {
+            // the zoom overview has its own small playhead
+            const CRect track(GetOverviewRect());
+            const int x = track.left + static_cast<int>(track.Width() * (rtPosDraw - m_rtStart) / (m_rtStop - m_rtStart));
+            if (x != m_lastOverviewX) {
+                m_lastOverviewX = x;
+                CRect r(track);
+                r.InflateRect(0, m_pMainFrame->m_dpi.ScaleY(3));
+                InvalidateRect(r);
+            }
         }
         if (bSetTaskbar && AfxGetAppSettings().bUseEnhancedTaskBar && m_pMainFrame->m_api.m_pTaskbarList) {
             VERIFY(S_OK == m_pMainFrame->m_api.m_pTaskbarList->SetProgressValue(m_pMainFrame->m_hWnd, std::max(m_rtPos, 1ll), m_rtStop));
@@ -538,16 +577,22 @@ void CPlayerSeekBar::CreateThumb(bool bEnabled, CDC& parentDC)
     }
 }
 
-CRect CPlayerSeekBar::GetBaseRect() const
+CRect CPlayerSeekBar::GetChannelRowRect() const
 {
     CRect r;
     GetClientRect(&r);
-    r.top += 1;
+    r.top += 1 + OverviewHeight(); // the zoom overview, when shown, sits above
     if (m_bLlcMode) {
         r.bottom -= LlcStripHeight(); // the LosslessCut strip sits below the channel
     } else if (m_pMainFrame->m_controls.ControlChecked(CMainFrameControls::Toolbar::CONTROLS)) {
         r.bottom += ADD_TO_BOTTOM_WITHOUT_CONTROLBAR;
     }
+    return r;
+}
+
+CRect CPlayerSeekBar::GetBaseRect() const
+{
+    CRect r(GetChannelRowRect());
 
     if (AppIsThemeLoaded()) { //no thumb so we can use all the space
         r.DeflateRect(m_pMainFrame->m_dpi.ScaleFloorX(2), m_pMainFrame->m_dpi.ScaleFloorX(2));
@@ -583,6 +628,7 @@ CRect CPlayerSeekBar::GetSeekableRect() const
     CRect r;
     GetClientRect(&r);
     r.bottom -= LlcStripHeight();
+    r.top += OverviewHeight();
     if (TimeSectionVisible()) {
         if (TimeSectionOnLeft()) {
             r.left = GetChannelRect().left;
@@ -980,6 +1026,10 @@ void CPlayerSeekBar::SetRange(REFERENCE_TIME rtStart, REFERENCE_TIME rtStop)
         if (m_rtStart != rtStart || m_rtStop != rtStop) {
             m_rtStart = rtStart;
             m_rtStop = rtStop;
+            if (IsZoomed()) {
+                // the duration can change while a file is still being written: keep the view inside it
+                SetViewTarget(m_viewTargetStart, m_viewTargetSpan, false);
+            }
             auto hasChapters = [&]() {
                 CAutoLock lock(&m_csChapterBag);
                 return m_pChapterBag && m_pChapterBag->ChapGetCount();
@@ -988,12 +1038,20 @@ void CPlayerSeekBar::SetRange(REFERENCE_TIME rtStart, REFERENCE_TIME rtStop)
                 Invalidate();
             }
             m_bHasDuration = true;
+            RefreshToolButtons(); // zoom is available now
         }
     } else {
         m_rtStart = 0;
         m_rtStop = 0;
         if (m_bHasDuration) {
+            const bool bWasZoomed = IsZoomed();
             m_bHasDuration = false;
+            m_viewStart = m_viewSpan = m_viewTargetStart = m_viewTargetSpan = 0.0;
+            m_bGliding = m_bPanning = false;
+            KillTimer(TIMER_ANIMATE);
+            m_bAnimating = false;
+            OnZoomStateMaybeChanged(bWasZoomed);
+            RefreshToolButtons();
             m_timeText.Empty();   // media closed: clear the time text (the section keeps its standard spacing)
             m_timeActualWidth = 0; // drop any actual-string widening so the closed state uses the model width
             HideToolTip();
@@ -1016,6 +1074,7 @@ void CPlayerSeekBar::SetPos(REFERENCE_TIME rtPos)
         return;
     }
 
+    FollowPlayhead(m_rtPosDraw, rtPos);
     SyncThumbToVideo(rtPos, rtPos);
 }
 
@@ -1043,7 +1102,7 @@ void CPlayerSeekBar::RemoveChapters()
 
 bool CPlayerSeekBar::DraggingThumb()
 {
-    return m_bDraggingThumb;
+    return m_bDraggingThumb || m_bGliding;
 }
 
 BEGIN_MESSAGE_MAP(CPlayerSeekBar, CDialogBar)
@@ -1064,11 +1123,34 @@ BEGIN_MESSAGE_MAP(CPlayerSeekBar, CDialogBar)
     ON_WM_MOUSELEAVE()
     ON_WM_THEMECHANGED()
     ON_WM_CAPTURECHANGED()
+    ON_WM_MOUSEWHEEL()
+    ON_WM_RBUTTONUP()
+    ON_NOTIFY_EX_RANGE(TTN_NEEDTEXT, 0, 0xFFFF, OnToolTipText)
+    ON_COMMAND(ID_SEEKBAR_SMOOTH_DRAG, OnSmoothDrag)
+    ON_UPDATE_COMMAND_UI(ID_SEEKBAR_SMOOTH_DRAG, OnUpdateSmoothDrag)
+    ON_COMMAND(ID_SEEKBAR_EXACT_DRAG, OnExactDrag)
+    ON_UPDATE_COMMAND_UI(ID_SEEKBAR_EXACT_DRAG, OnUpdateExactDrag)
+    ON_COMMAND(ID_SEEKBAR_ZOOM_IN, OnZoomIn)
+    ON_COMMAND(ID_SEEKBAR_ZOOM_OUT, OnZoomOut)
+    ON_COMMAND(ID_SEEKBAR_ZOOM_RESET, OnZoomReset)
+    ON_UPDATE_COMMAND_UI(ID_SEEKBAR_ZOOM_IN, OnUpdateZoom)
+    ON_UPDATE_COMMAND_UI(ID_SEEKBAR_ZOOM_OUT, OnUpdateZoom)
+    ON_UPDATE_COMMAND_UI(ID_SEEKBAR_ZOOM_RESET, OnUpdateZoom)
 END_MESSAGE_MAP()
 
 void CPlayerSeekBar::OnPaint()
 {
-    CPaintDC dc(this);
+    // Painted into a bitmap and copied in one go: the bar repaints every frame while zooming or
+    // moving the view, and painting the background and then the rest straight to the screen flickers.
+    CPaintDC paintDC(this);
+    CRect clientRect;
+    GetClientRect(&clientRect);
+    CDC dc;
+    dc.CreateCompatibleDC(&paintDC);
+    CBitmap backBuffer;
+    backBuffer.CreateCompatibleBitmap(&paintDC, std::max(1, clientRect.Width()), std::max(1, clientRect.Height()));
+    CBitmap* pOldBackBuffer = dc.SelectObject(&backBuffer);
+    dc.IntersectClipRect(&clientRect); // the clip-region juggling below needs a region to start from
 
     COLORREF
     dark   = GetSysColor(COLOR_GRAYTEXT),
@@ -1079,6 +1161,9 @@ void CPlayerSeekBar::OnPaint()
 
     const CRect channelRect(GetChannelRect());
     auto funcMarkChannel = [&](REFERENCE_TIME pos, long verticalPadding, long thickness, COLORREF markColor) {
+        if (!InView(pos)) {
+            return;
+        }
         long markPos = channelRect.left + ChannelPointFromPosition(pos);
         CRect r(markPos, channelRect.top + verticalPadding, markPos + thickness - 1, channelRect.bottom - verticalPadding);
         if (r.right < channelRect.right) {
@@ -1129,7 +1214,10 @@ void CPlayerSeekBar::OnPaint()
 
         // Channel
         {
-            {
+            if (m_bHasDuration && !InView(m_rtPosDraw)) {
+                // zoomed in with the playhead outside the view: the whole channel is played or not
+                dc.FillSolidRect(&channelRect, m_rtPosDraw > ViewStop() ? CMPCTheme::ScrollProgressColor : CMPCTheme::ScrollBGColor);
+            } else {
                 long seekPos = ChannelPointFromPosition(m_rtPosDraw);
                 CRect r, playedRect, unplayedRect, curPosRect;
                 playedRect = channelRect;
@@ -1231,6 +1319,12 @@ void CPlayerSeekBar::OnPaint()
     // dedicated section beside the channel (the channel was shrunk to make room in GetChannelRect, so
     // the time is never drawn over it). Aligned toward the outer edge of the bar - right by default,
     // left when the advanced option places the section on the left.
+    if (OverviewHeight() > 0) {
+        dc.SelectClipRgn(nullptr); // drawn over the background filled above
+        DrawOverview(dc);
+    }
+    UpdateToolTips();
+
     if (TimeSectionVisible()) {
         dc.SelectClipRgn(nullptr); // channel/thumb drawing restricted the clip region
         EnsureTimeFont();
@@ -1252,6 +1346,9 @@ void CPlayerSeekBar::OnPaint()
         dc.SetBkMode(oldBkMode);
         dc.SelectObject(pOldFont);
     }
+
+    paintDC.BitBlt(0, 0, clientRect.Width(), clientRect.Height(), &dc, 0, 0, SRCCOPY);
+    dc.SelectObject(pOldBackBuffer);
 }
 
 void CPlayerSeekBar::OnContextMenu(CWnd* pWnd, CPoint point)
@@ -1282,14 +1379,43 @@ void CPlayerSeekBar::OnContextMenu(CWnd* pWnd, CPoint point)
 
 void CPlayerSeekBar::OnLButtonDown(UINT nFlags, CPoint point)
 {
+    const OverviewHit hit = OverviewHitTest(point);
+    if (hit != OverviewHit::None) {
+        if (hit == OverviewHit::Label) {
+            ResetZoom();
+            return;
+        }
+        const double t = OverviewTimeAt(point.x);
+        if (hit == OverviewHit::Track) {
+            PanTo(t - m_viewTargetSpan / 2); // center the view there, then keep dragging it
+        }
+        m_panGrab = t - m_viewTargetStart;
+        m_panPart = hit == OverviewHit::Track ? OverviewHit::Window : hit;
+        m_bPanning = true;
+        m_lastUserPanTick = GetTickCount64();
+        HideToolTip();
+        m_pMainFrame->PreviewWindowHide();
+        SetCapture();
+        Invalidate();
+        return;
+    }
     if (m_bEnabled && m_bHasDuration && GetSeekableRect().PtInRect(point)) {
-        pauseAfterFirstScroll = AfxGetAppSettings().bPauseWhileDraggingSeekbar && m_pMainFrame->GetMediaState() == State_Running;
-        pausedForScrolling = false;
+        if (!m_bGliding) {
+            pauseAfterFirstScroll = AfxGetAppSettings().bPauseWhileDraggingSeekbar && m_pMainFrame->GetMediaState() == State_Running;
+            pausedForScrolling = false;
+        }
         SetCapture();
         m_bDraggingThumb = true;
+        // a click seeks right there; with smooth dragging, the thumb then glides after the mouse
         MoveThumb(point);
         SeekToThumb(point, SeekMode::Default);
+        m_bGliding = false;
+        m_glidePos = static_cast<double>(m_rtPosDraw);
+        m_glideTarget = m_rtPosDraw;
         invalidateThumb();
+        if (IsZoomed()) {
+            StartAnimation(); // scrolls the view while dragging past its edges
+        }
     } else {
         if (!m_pMainFrame->m_fFullScreen) {
             ClientToScreen(&point);
@@ -1300,12 +1426,29 @@ void CPlayerSeekBar::OnLButtonDown(UINT nFlags, CPoint point)
 
 void CPlayerSeekBar::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
+    const OverviewHit hit = OverviewHitTest(point);
+    if (hit != OverviewHit::None && hit != OverviewHit::Label) {
+        ResetZoom(); // double-clicking the overview shows the whole timeline again
+        return;
+    }
     OnLButtonDown(nFlags, point);
 }
 
 void CPlayerSeekBar::OnLButtonUp(UINT nFlags, CPoint point)
 {
-    if (DraggingThumb()) {
+    if (m_bPanning) {
+        EndOverviewDrag();
+        return;
+    }
+    if (m_bDraggingThumb && (IsSmoothDrag() || m_bGliding)) {
+        // smooth dragging stops right where the thumb is when the button goes up
+        m_bGliding = false;
+        SeekToThumb(m_glidePoint, SeekMode::DragEnd);
+        ReleaseCapture();
+        invalidateThumb();
+        return;
+    }
+    if (m_bDraggingThumb) {
         MoveThumb(point);
         SeekToThumb(point, SeekMode::DragEnd);
         ReleaseCapture();
@@ -1372,11 +1515,33 @@ void CPlayerSeekBar::invalidateThumb()
 
 void CPlayerSeekBar::OnMouseMove(UINT nFlags, CPoint point)
 {
+    if (!m_bTrackingLeave) {
+        TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hWnd, 0 };
+        m_bTrackingLeave = !!TrackMouseEvent(&tme);
+    }
 
-    if (DraggingThumb() && (nFlags & MK_LBUTTON)) {
-        MoveThumb(point);
+    if (m_bPanning) {
+        if (nFlags & MK_LBUTTON) {
+            DragOverview(point.x);
+        }
+        return;
+    }
+    const OverviewHit overviewHot = OverviewHitTest(point);
+    if (overviewHot != m_overviewHot) {
+        m_overviewHot = overviewHot;
+        CRect r(GetOverviewRect());
+        r.left = 0;
+        r.InflateRect(0, m_pMainFrame->m_dpi.ScaleY(3));
+        InvalidateRect(r);
+    }
 
-        SeekToThumb(point, SeekMode::Drag);
+    if (m_bDraggingThumb && (nFlags & MK_LBUTTON)) {
+        if (IsSmoothDrag()) {
+            SetGlideTarget(point);
+        } else {
+            MoveThumb(point);
+            SeekToThumb(point, SeekMode::Drag);
+        }
     }
 
     if (AfxGetAppSettings().fUseSeekbarHover) {
@@ -1405,7 +1570,14 @@ BOOL CPlayerSeekBar::OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
     CPoint point;
     GetCursorPos(&point);
     ScreenToClient(&point);
-    if (m_bEnabled && m_bHasDuration && GetSeekableRect().PtInRect(point)) {
+    const OverviewHit hit = m_bPanning ? m_panPart : OverviewHitTest(point);
+    if (hit == OverviewHit::LeftEdge || hit == OverviewHit::RightEdge) {
+        ::SetCursor(::LoadCursor(nullptr, IDC_SIZEWE));
+    } else if (hit == OverviewHit::Window) {
+        ::SetCursor(::LoadCursor(nullptr, IDC_SIZEALL));
+    } else if (hit != OverviewHit::None) {
+        ::SetCursor(m_cursor);
+    } else if (m_bEnabled && m_bHasDuration && GetSeekableRect().PtInRect(point)) {
         ::SetCursor(m_cursor);
     } else {
         ret = __super::OnSetCursor(pWnd, nHitTest, message);
@@ -1419,6 +1591,9 @@ void CPlayerSeekBar::OnTimer(UINT_PTR nIDEvent)
     VERIFY(GetCursorPos(&point));
     ScreenToClient(&point);
     switch (nIDEvent) {
+        case TIMER_ANIMATE:
+            OnAnimate();
+            break;
         case TIMER_PREVIEW_SEEK:
             KillTimer(TIMER_PREVIEW_SEEK);
             if (m_bHasDuration && GetSeekableRect().PtInRect(point)) {
@@ -1456,6 +1631,11 @@ void CPlayerSeekBar::OnMouseLeave()
     m_pMainFrame->PreviewWindowHide();
     m_bIgnoreLastTooltipPoint = true;
     checkHover(CPoint(0, 0));
+    m_bTrackingLeave = false;
+    if (m_overviewHot != OverviewHit::None) {
+        m_overviewHot = OverviewHit::None;
+        Invalidate();
+    }
 }
 
 LRESULT CPlayerSeekBar::OnThemeChanged()
@@ -1470,13 +1650,19 @@ void CPlayerSeekBar::OnCaptureChanged(CWnd* pWnd)
 {
     // Capture can also change without a drag in progress (e.g. when the time section's right-click
     // popup menu takes capture), so only run the drag-end cleanup when we were actually dragging.
-    if (m_bDraggingThumb) {
-        m_bDraggingThumb = false;
-        pauseAfterFirstScroll = false;
-        if (pausedForScrolling) {
-            pausedForScrolling = false;
-            m_pMainFrame->MediaControlRun();
+    if (pWnd != this) {
+        if (m_bPanning) {
+            EndOverviewDrag();
         }
+    }
+    if (m_bDraggingThumb && pWnd != this) {
+        m_bDraggingThumb = false;
+        if (m_bGliding) {
+            m_bGliding = false; // stop where the thumb is
+            SeekToThumb(m_glidePoint, SeekMode::DragEnd);
+            invalidateThumb();
+        }
+        FinishDrag();
         if (!pWnd) {
             // HACK: windowed (not renderless) video renderers may not produce WM_MOUSEMOVE message here
             m_pMainFrame->UpdateControlState(CMainFrame::UPDATE_CHILDVIEW_CURSOR_HACK);
@@ -1500,7 +1686,7 @@ void CPlayerSeekBar::PreviewWindowShow(CPoint point) {
         if (m_pMainFrame->CanPreviewUse()) {
             REFERENCE_TIME newpos = std::clamp(PositionFromClientPoint(point), 0LL, m_rtStop);
             if (newpos != m_pos_preview) {
-                if (GetKeyState(VK_SHIFT) >= 0) {
+                if (GetKeyState(VK_SHIFT) >= 0 && !IsExactDrag()) {
                     newpos = m_pMainFrame->GetClosestKeyFramePreview(newpos);
                 }
             }
